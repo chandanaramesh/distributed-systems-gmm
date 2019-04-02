@@ -162,7 +162,7 @@ def acceptor(server, data, addr):
 			else:
 				voteGranted = 0
 		else:
-			# find higher term in RequestVoteMsg
+			# find higher term in RequestForVoteMessage
 			server.currentTerm = _term
 			server.save()
 			server.step_down()
@@ -174,7 +174,7 @@ def acceptor(server, data, addr):
 			else:
 				voteGranted = 0
 		reply = str(voteGranted)
-		reply_msg = VoteResponseMsg(server.id, _sender, server.currentTerm, reply)
+		reply_msg = VoteResponseMessage(server.id, _sender, server.currentTerm, reply)
 		s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 		s.sendto(pickle.dumps(reply_msg), ("",server.addressbook[_sender]))
 
@@ -313,7 +313,7 @@ def acceptor(server, data, addr):
 					elif server.log[idx-1].type == 2:
 						server.during_change = 0
 
-		reply_msg = AppendEntriesResponseMsg(server.id, _sender, server.currentTerm, success, matchIndex)
+		reply_msg = AppendEntriesResponseMessage(server.id, _sender, server.currentTerm, success, matchIndex)
 		s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 		s.sendto(pickle.dumps(reply_msg), ("",server.addressbook[_sender]))
 

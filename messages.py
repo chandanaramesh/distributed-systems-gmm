@@ -18,7 +18,7 @@ class BaseMessage(object):
         logger.debug('Base Message Init. Sender = {}, Receiver = {}, term = {}'.format(sender, receiver, term))
 
 
-class RequestVoteMsg(BaseMessage):
+class RequestForVoteMessage(BaseMessage):
 
     def __init__(self, sender, receiver, term, data):
         BaseMessage.__init__(self, sender, receiver, term)
@@ -27,7 +27,7 @@ class RequestVoteMsg(BaseMessage):
         logger.debug('Request Vote Message. Message Type = {}, data = {}'.format(self.type, self.data))
 
 
-class VoteResponseMsg(BaseMessage):
+class VoteResponseMessage(BaseMessage):
 
     def __init__(self, sender, receiver, term, data):
         BaseMessage.__init__(self, sender, receiver, term)
@@ -35,7 +35,7 @@ class VoteResponseMsg(BaseMessage):
         self.data = data
         logger.debug('Vote Response Message. Message Type = {}, data = {}'.format(self.type, self.data))
 
-class AppendEntriesMsg(BaseMessage):
+class AppendEntriesMessage(BaseMessage):
 
     def __init__(self, sender, receiver, term, entries, commitIndex, prevLogIndex, prevLogTerm):
         BaseMessage.__init__(self, sender, receiver, term)
@@ -46,7 +46,7 @@ class AppendEntriesMsg(BaseMessage):
         self.prevLogIndex = prevLogIndex
         # logger.debug('Append Entries Request Message. Message Type = {}, entries = {}, commit index = {}, previous Log Term = {}, previous Log Index = {}'.format(self.type, self.entries, self.commitIndex, self.prevLogTerm, self.prevLogIndex))
 
-class AppendEntriesResponseMsg(BaseMessage):
+class AppendEntriesResponseMessage(BaseMessage):
 
     def __init__(self, sender, receiver, term, success, matchIndex):
         BaseMessage.__init__(self, sender, receiver, term)
@@ -66,7 +66,6 @@ class LogEntry(object):
         logger.debug('Log Entry: Term = {}, command = {}, uuid = {}, addr = {}, type = {}'.format(term, command, uuid, addr, _type))
 
 class Request(object):
-    """docstring for Request"""
     def __init__(self, request_msg, uuid = 0):
         self.request_msg = request_msg
         self.type = 'client'
