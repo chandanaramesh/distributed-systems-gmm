@@ -10,7 +10,7 @@ import threading
 from multiprocessing import Process
 
 from KThread import *
-from messages import *
+from MessageModels import *
 from CommunicationsHandler import *
 
 logger = logging.getLogger(__name__)

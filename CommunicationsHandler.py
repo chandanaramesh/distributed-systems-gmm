@@ -3,7 +3,7 @@ import pickle
 import time
 import random
 
-from messages import *
+from MessageModels import *
 from KThread import *
 
 def acceptor(server, data, addr):

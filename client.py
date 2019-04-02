@@ -5,7 +5,7 @@ import uuid
 import time
 
 from KThread import *
-from messages import *
+from MessageModels import *
 
 class client(object):
     cnt = 0
