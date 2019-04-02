@@ -3,7 +3,7 @@ import sys
 import time
 import logging
 
-from node import *
+from NodeConsensusServer import *
 from commons.ArgParser import ArgsParser
 from commons.Constants import (LOG_FILENAME, LOG_FORMAT, DEBUG_LEVEL)
 
