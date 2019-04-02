@@ -11,7 +11,7 @@ from multiprocessing import Process
 
 from KThread import *
 from messages import *
-from follower_functions import *
+from CommunicationsHandler import *
 
 logger = logging.getLogger(__name__)
 
