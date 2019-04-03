@@ -4,4 +4,8 @@ Repository to maintain the code base for Distributed Systems Group Management Pr
 # Details
 ## Architecture
 
+## Technical Stack
+
 ## Instructions to Run
+
+
