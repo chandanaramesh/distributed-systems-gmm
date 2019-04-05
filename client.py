@@ -5,7 +5,9 @@ import uuid
 import time
 
 from KThread import *
-from MessageModels import *
+#from MessageModels import *
+from messages.config_messages import ConfigChange
+from messages.request_redirect import Request
 
 class client(object):
     cnt = 0

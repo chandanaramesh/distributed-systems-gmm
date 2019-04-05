@@ -3,8 +3,12 @@ import pickle
 import time
 import random
 
-from MessageModels import *
 from KThread import *
+from messages.log_messages import LogEntry
+from messages.config_messages import ConfigChange
+from messages.request_redirect import RequestRedirect
+from messages.vote_messages import VoteResponseMessage
+from messages.append_entries_messages import AppendEntriesResponseMessage
 
 def acceptor(server, data, addr):
 	Msg = pickle.loads(data)
@@ -13,7 +17,7 @@ def acceptor(server, data, addr):
 	# deal with config changes
 	if _type == 'change':
 		if Msg.phase == 1:
-			print 'Config change phase 1'
+			print 'Config change phase 1 ', server.id, " ", server.currentTerm
 			server.during_change = 1
 			server.new = Msg.new_config
 			server.old = server.peers[:]
@@ -28,7 +32,7 @@ def acceptor(server, data, addr):
 			print 'Config change phase 1 applied'
 			#return
 		else:
-			print 'Config change phase 2'
+			print 'Config change phase 2 ', server.id, " ", server.currentTerm
 			server.during_change = 2
 			server.new = Msg.new_config
 			if Msg.addr != None:
@@ -49,7 +53,7 @@ def acceptor(server, data, addr):
 		# 			server.matchIndex[peer] = 0
 
 		if server.role != 'leader':
-			print 'redirect config change to the leader'
+			print 'redirect config change to the leader from  ', server.id, " ", server.currentTerm
 			if server.leaderID != 0:
 				redirect_target = server.leaderID
 			else:
@@ -129,7 +133,7 @@ def acceptor(server, data, addr):
 				server.save()
 			# we need to redirect the request to leader
 			else:
-				print 'redirect the request to leader'
+				print 'redirect the request to leader from ', server.id, " ", server.currentTerm
 				if server.leaderID != 0:
 					redirect_target = server.leaderID
 				else:
@@ -148,11 +152,11 @@ def acceptor(server, data, addr):
 		if _sender not in server.peers:
 			return
 		_msg = Msg.data
-		print '---------Get requestvote message---------'
+		print '---------Get requestvote message--------- votes needed from  ', server.id, " ", server.currentTerm ," for ", _sender," term ",_term
 		_msg = _msg.split()
 		log_info = (int(_msg[0]), int(_msg[1]))
 		if _term < server.currentTerm:
-			print 'rejected due to old term'
+			print 'rejected due to old term by ',server.id
 			voteGranted = 0		
 		elif _term == server.currentTerm:
 			if log_info >= (server.lastLogTerm, server.lastLogIndex) and (server.votedFor == -1 or server.votedFor == _sender):
@@ -170,9 +174,11 @@ def acceptor(server, data, addr):
 			if log_info >= (server.lastLogTerm, server.lastLogIndex):
 				voteGranted = 1
 				server.votedFor = _sender
+				print 'found higher term.. log matched.. stepped down..given vote to ',_sender,' by ', server.id
 				server.save()
 			else:
 				voteGranted = 0
+				print 'found higher term.. log mismatched.. stepped down..rejected vote to ', _sender, ' by ', server.id
 		reply = str(voteGranted)
 		reply_msg = VoteResponseMessage(server.id, _sender, server.currentTerm, reply)
 		s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -194,6 +200,7 @@ def acceptor(server, data, addr):
 					# becomes a leader
 						server.role = 'leader'
 						server.follower_state.kill()
+						print 'new leader ',server.id, ' during change 0'
 						server.leader_state = KThread(target = server.leader, args = ())
 						server.leader_state.start()
 			elif server.during_change == 1:
@@ -209,6 +216,7 @@ def acceptor(server, data, addr):
 					if server.election.is_alive():
 						server.election.kill()
 					server.role = 'leader'
+					print 'new leader ', server.id, ' during change 1'
 					server.follower_state.kill()
 					server.leader_state = KThread(target = server.leader, args = ())
 					server.leader_state.start()
@@ -222,6 +230,7 @@ def acceptor(server, data, addr):
 					if server.election.is_alive():
 						server.election.kill()
 					server.role = 'leader'
+					print 'new leader ', server.id
 					server.follower_state.kill()
 					server.leader_state = KThread(target = server.leader, args = ())
 					server.leader_state.start()					
@@ -234,7 +243,7 @@ def acceptor(server, data, addr):
 				if server.role == 'candidate':
 					server.step_down()
 
-			print 'vote rejected by %d' % _sender
+			print 'vote rejected by ',_sender,' to ',server.id
 
 	elif _type == 0: # AppendEntries msg
 		# print '---------Get AppendEntries message---------'
