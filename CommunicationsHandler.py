@@ -69,8 +69,8 @@ def acceptor(server, data, addr):
 		#server.save()
 		return
 
-	# deal with client's message
-	if _type == 'client' or _type == 'redirect':
+	# deal with ClientRequestor's message
+	if _type == 'ClientRequestor' or _type == 'redirect':
 
 		if _type == 'redirect':
 			addr = Msg.addr
@@ -169,7 +169,7 @@ def acceptor(server, data, addr):
 			# find higher term in RequestForVoteMessage
 			server.currentTerm = _term
 			server.save()
-			server.step_down()
+			server.stepDown()
 
 			if log_info >= (server.lastLogTerm, server.lastLogIndex):
 				voteGranted = 1
@@ -241,7 +241,7 @@ def acceptor(server, data, addr):
 				server.currentTerm = _term
 				server.save()
 				if server.role == 'candidate':
-					server.step_down()
+					server.stepDown()
 
 			print 'vote rejected by ',_sender,' to ',server.id
 
@@ -258,7 +258,7 @@ def acceptor(server, data, addr):
 		if _term >= server.currentTerm:
 			server.currentTerm = _term
 			server.save()
-			server.step_down()
+			server.stepDown()
 			if server.role == 'follower':
 				server.last_update = time.time()
 			if prevLogIndex != 0:
@@ -335,7 +335,7 @@ def acceptor(server, data, addr):
 			if _term > server.currentTerm:
 				server.currentTerm = _term
 				server.save()
-				server.step_down()
+				server.stepDown()
 			else:
 				server.nextIndex[_sender] -= 1
 		else:
@@ -414,7 +414,7 @@ def acceptor(server, data, addr):
 									time.sleep(1)
 									if not server.id in server.new:
 										print 'I am not in the new configuration'
-										server.step_down()
+										server.stepDown()
 									server.during_change = 0
 									server.save()
 									s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
