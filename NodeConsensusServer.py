@@ -1,6 +1,7 @@
 import sys
 import time
 import json
+import uuid
 import socket
 import thread
 import random
@@ -13,17 +14,19 @@ from KThread import *
 from messages.append_entries_messages import AppendEntriesMessage
 from messages.vote_messages import RequestForVoteMessage
 from messages.config_messages import ServerConfig
+from messages.base_message import BaseMessage
 from AcceptorFile import *
 
-from commons.Constants import DEBUG
+from commons.Constants import DEBUG, SERVER_NODE_GROUP_NAME
 
 logger = logging.getLogger(__name__)
 
 class Server(object):
     def __init__(self, id_):
         self.id = id_
-        self.config_file = 'config-%d' % self.id
-        logger.debug('Server Init. Config File = {}'.format(self.config_file))
+        self.friendlyName = self._formFriendlyName(id_)
+        self.configFile = 'config-%d' % self.id
+        logger.debug('Server Init. Config File = {}'.format(self.configFile))
         self.role = 'follower'
         self.commitIndex = 0
         self.lastApplied = 0
@@ -31,7 +34,8 @@ class Server(object):
         address = json.load(file('config.json'))
         port_list = address['AddressBook']
         running = address['running']
-        self.initial_state = address['initial_state']
+        self.initialState = {}
+        # self.initialState = 100
         self.addressbook = {}
         for id_ in running:
             self.addressbook[id_] = port_list[id_ - 1]
@@ -150,7 +154,19 @@ class Server(object):
         for peer in self.peers:
             self.nextIndex[peer] = len(self.log) + 1
             self.matchIndex[peer] = 0
+        nodes = []
+        nodes.append(self._formFriendlyName(self.id))
+        for peer in self.peers:
+            nodes.append(self._formFriendlyName(peer))
+        self.initialState[SERVER_NODE_GROUP_NAME] = nodes
+        _uuid = uuid.uuid1()
+        newAppendLogEntry = LogEntry(self.currentTerm, self.initialState, BaseMessage.LocalMessageAddress, _uuid)
+        self.log.append(newAppendLogEntry)
         self.appendEntries()
+
+    def _formFriendlyName(self, id):
+        return 'Server '+ str(id)
+
 
     def appendEntries(self):
         if DEBUG:
@@ -179,8 +195,8 @@ class Server(object):
                     else:
                         prevLogTerm = 0
 
-                Msg = AppendEntriesMessage(self.id, peer, self.currentTerm, entries, self.commitIndex, prevLogIndex, prevLogTerm)
-                data = pickle.dumps(Msg)
+                msg = AppendEntriesMessage(self.id, peer, self.currentTerm, entries, self.commitIndex, prevLogIndex, prevLogTerm)
+                data = pickle.dumps(msg)
                 sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
                 sock.sendto(data, ("", self.addressbook[peer]))
             time.sleep(0.5)
@@ -202,7 +218,7 @@ class Server(object):
         initial_running = [1,2,3]
 
         try:
-            with open(self.config_file) as f:
+            with open(self.configFile) as f:
                 serverConfig = pickle.load(f)
         except Exception as e:
             if self.id not in initial_running:
@@ -211,7 +227,7 @@ class Server(object):
                 initial_running.remove(self.id)
                 serverConfig = ServerConfig(100, 0, -1, [], initial_running)
 
-        self.poolsize = serverConfig.poolsize
+        self.groupInfo = serverConfig.groupInfo
         self.currentTerm = serverConfig.currentTerm
         self.votedFor = serverConfig.votedFor
         self.log = serverConfig.log
@@ -221,8 +237,8 @@ class Server(object):
     def save(self):
         if DEBUG:
             print 'Server save config Method ', self.id, " ", self.currentTerm
-        serverConfig = ServerConfig(self.poolsize, self.currentTerm, self.votedFor, self.log, self.peers)
-        with open(self.config_file, 'w') as f:
+        serverConfig = ServerConfig(self.groupInfo, self.currentTerm, self.votedFor, self.log, self.peers)
+        with open(self.configFile, 'w') as f:
             pickle.dump(serverConfig, f)
 
     def run(self):
