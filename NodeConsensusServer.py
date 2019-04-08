@@ -13,8 +13,9 @@ from KThread import *
 from messages.append_entries_messages import AppendEntriesMessage
 from messages.vote_messages import RequestForVoteMessage
 from messages.config_messages import ServerConfig
-#from CommunicationsHandler import *
 from AcceptorFile import *
+
+from commons.Constants import DEBUG
 
 logger = logging.getLogger(__name__)
 
@@ -68,24 +69,23 @@ class Server(object):
             #print 'listening ', self.id
             thr = KThread(target=on_accept, args=(self,data,addr))
             thr.start()
-            '''
-            data, addr = srv.recvfrom(1024)
-            logger.info('------ from listening method------------')
-            #logger.info(data,addr)
-            thr = KThread(target=on_accept, args=(self, data, addr))
-            thr.start()
-            '''
         srv.close()
 
     def follower(self):
         logger.info('Server Follower Method')
+        print ' '
+        print '*************************'
         print 'Running as a follower ', self.id, " ", self.currentTerm
+        print 'My ID is ', self.id
+        print "The terms is ", self.currentTerm
+        print "My Peers are ", self.peers
+        print '*************************'
         self.role = 'follower'
         self.last_update = time.time()
         election_timeout = 5 * random.random() + 5
         while time.time() - self.last_update <= election_timeout:
             pass
-        self.start_election()
+        self.startElection()
         while True:
             self.last_update = time.time()
             election_timeout = 5 * random.random() + 5
@@ -94,12 +94,12 @@ class Server(object):
 
             if self.election.is_alive():
                 self.election.kill()
-            self.start_election()
+            self.startElection()
 
-    def start_election(self):
-        print 'Server start_election Method ', self.id, " ", self.currentTerm
+    def startElection(self):
+        print 'Server startElection Method ', self.id, " ", self.currentTerm
         self.role = 'candidate'
-        self.election = KThread(target =self.thread_election,args = ())
+        self.election = KThread(target =self.threadElection, args = ())
         if len(self.peers) != 0:
             self.currentTerm += 1
             self.votedFor = self.id
@@ -118,17 +118,14 @@ class Server(object):
                     self.newVotes = 1
             self.election.start()
 
-    def thread_election(self):
-        logger.info('Server thread_election Method')
-        print 'timouts, start a new election with term %d' % self.currentTerm
+    def threadElection(self):
+        logger.info('Server threadElection Method')
+        print 'timeouts, start a new election with term %d' % self.currentTerm
         self.role = 'candidate'
         self.request_votes = self.peers[:]
         sender = self.id
 
         while 1:
-            # print 'Send vote request to ', self.request_votes
-            #logger.info(self.peers,self.request_votes)
-
             for peer in self.peers:
                 if peer in self.request_votes:
                     Msg = str(self.lastLogTerm) + ' ' + str(self.lastLogIndex)
@@ -140,17 +137,24 @@ class Server(object):
 
     def leader(self):
         logger.info('Server leader Method')
-        print 'Running as a leader ', self.id, " ", self.currentTerm
+        print ' '
+        print '*************************'
+        print 'Running as a leader'
+        print 'My ID is ', self.id
+        print "The terms is ", self.currentTerm
+        print "My Peers are ", self.peers
+        print '*************************'
         self.role = 'leader'
         self.nextIndex = {}
         self.matchIndex = {}
         for peer in self.peers:
             self.nextIndex[peer] = len(self.log) + 1
             self.matchIndex[peer] = 0
-        self.append_entries()
+        self.appendEntries()
 
-    def append_entries(self):
-        print 'Server append_entries Method ', self.id, " ", self.currentTerm
+    def appendEntries(self):
+        if DEBUG:
+            print 'Server appendEntries Method ', self.id, " ", self.currentTerm
         receipts = self.peers[:]
         while 1:
             receipts = self.peers[:]
@@ -181,8 +185,8 @@ class Server(object):
                 sock.sendto(data, ("", self.addressbook[peer]))
             time.sleep(0.5)
 
-    def step_down(self):
-        logger.info('Server step_down Method')
+    def stepDown(self):
+        logger.info('Server stepDown Method')
         if self.role == 'candidate':
             print 'candidate step down when higher term and becomes follower', self.id, " ", self.currentTerm
             self.election.kill()
@@ -196,7 +200,6 @@ class Server(object):
     def load(self):
         print 'Server load config Method ', self.id
         initial_running = [1,2,3]
-        # new_quorom = []
 
         try:
             with open(self.config_file) as f:
@@ -214,27 +217,20 @@ class Server(object):
         self.log = serverConfig.log
         self.peers = serverConfig.peers
         self.majority = (len(self.peers) + 1)/2 + 1
-        # self.new_quorom = new_quorom
-        #self.majority_1 = (len(self.new_quorom) + 1)/2 + 1
 
     def save(self):
-        print 'Server save config Method ', self.id, " ", self.currentTerm
+        if DEBUG:
+            print 'Server save config Method ', self.id, " ", self.currentTerm
         serverConfig = ServerConfig(self.poolsize, self.currentTerm, self.votedFor, self.log, self.peers)
         with open(self.config_file, 'w') as f:
             pickle.dump(serverConfig, f)
 
     def run(self):
-        print 'Server thread run Method ', self.id, " ", self.currentTerm
+        if DEBUG:
+            print 'Server thread run Method ', self.id, " ", self.currentTerm
         time.sleep(1)
         self.follower_state = KThread(target = self.follower, args = ())
         self.follower_state.start()
-        # while self.role != 'leader':
-        # 	pass
-        # self.follower_state.kill()
-        # self.listener.kill()
-
-        # print 'Now I am the leader for term %d' % self.currentTerm
-        # self.leader_state.start()
 
 
 
