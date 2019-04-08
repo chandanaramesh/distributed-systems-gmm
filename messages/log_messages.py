@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 class LogEntry(object):
 
-    def __init__(self, term, command, addr, uuid, _type = BaseMessage.AppendEntries):
+    def __init__(self, term, command, addr, uuid, _type = BaseMessage.AppendEntriesMessage):
         self.term = term
         self.command = command
         self.uuid = uuid

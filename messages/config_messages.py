@@ -5,9 +5,9 @@ Created on Thu Apr  4 13:27:50 2019
 @author: manda
 """
 import logging
+from messages.base_message import BaseMessage
 
 logger = logging.getLogger(__name__)
-messageType = {'change':4}
 
 class ServerConfig(object):
     def __init__(self, poolsize, currentTerm, votedFor, log, peers):
@@ -25,5 +25,5 @@ class ConfigChange(object):
         self.uuid = uuid
         self.addr = addr
         self.phase = phase
-        self.type = messageType['change']
+        self.type = BaseMessage.ChangeMessage
         logger.debug('Config Change: new_config = {}, uuid = {}, phase = {}, addr = {}'.format(new_config, uuid, phase, addr))
