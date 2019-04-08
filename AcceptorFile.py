@@ -111,10 +111,10 @@ def appendEntriesMessage(server, Msg, addr):
         lastApplied = server.commitIndex
         server.commitIndex = min(leaderCommit, len(server.log))
         if server.commitIndex > lastApplied:
-            server.poolsize = server.initial_state
+            server.groupInfo = server.initialState
             for idx in range(1, server.commitIndex + 1):
                 if server.log[idx - 1].type == BaseMessage.AppendEntriesMessage:
-                    server.poolsize -= server.log[idx - 1].command
+                    server.groupInfo = server.log[idx - 1].command
                 elif server.log[idx - 1].type == BaseMessage.RequestVoteResponse:
                     server.during_change = 0
 
@@ -266,11 +266,12 @@ def appendEntriesResponse(server, Msg, addr):
                     majority = (len(server.peers) + 1) / 2 + 1
                     if compare == server.majority and server.log[N - 1].term == server.currentTerm:
                         for idx in range(server.commitIndex + 1, N + 1):
-                            server.poolsize -= server.log[idx - 1].command
+                            server.groupInfo = server.log[idx - 1].command
                             server.save()
-                            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                            s.sendto('Your request is fullfilled', server.log[idx - 1].addr)
-                            s.close()
+                            if server.log[idx - 1].addr is not None: # To Handle Local Messages
+                                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                                s.sendto('Your request is fullfilled', server.log[idx - 1].addr)
+                                s.close()
                             if DEBUG or ACCEPTOR:
                                 print 'Replied to the client'
                         server.commitIndex = N
@@ -291,11 +292,11 @@ def appendEntriesResponse(server, Msg, addr):
                                 votes_2 += 1
                     if votes_1 >= majority_1 and votes_2 >= majority_2 and server.log[N - 1].term == server.currentTerm:
                         server.commitIndex = N
-                        poolsize = server.initial_state
+                        groupInfo = server.initialState
                         for idx in range(1, N + 1):
                             if server.log[idx - 1].type == BaseMessage.AppendEntriesMessage:
-                                poolsize -= server.log[idx - 1].command
-                        server.poolsize = poolsize
+                                groupInfo = server.log[idx - 1].command
+                        server.groupInfo = groupInfo
                         server.save()
                         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                         s.sendto('Your request is fullfilled', server.log[idx - 1].addr)
@@ -316,11 +317,12 @@ def appendEntriesResponse(server, Msg, addr):
                     if votes == majority and server.log[N - 1].term == server.currentTerm:
                         for idx in range(server.commitIndex + 1, N + 1):
                             if server.log[idx - 1].type == BaseMessage.AppendEntriesMessage:
-                                server.poolsize -= server.log[idx - 1].command
+                                server.groupInfo = server.log[idx - 1].command
                                 server.save()
-                                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                                s.sendto('Your request is fullfilled', server.log[idx - 1].addr)
-                                s.close()
+                                if server.log[idx - 1].addr is not None:
+                                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                                    s.sendto('Your request is fullfilled', server.log[idx - 1].addr)
+                                    s.close()
                                 server.commitIndex = idx
                             elif server.log[idx - 1].type == BaseMessage.RequestVoteResponse:
                                 server.commitIndex = idx
@@ -386,7 +388,12 @@ def clientRequests(server, Msg, addr):
     # addr = Msg.addr
     msg_string = Msg.request_msg
     if msg_string == 'show':
-        state = server.poolsize
+        state = ''
+        for group in server.groupInfo:
+            state += "Group Name = " + group + '\n'
+            state += "Nodes/Process in Group:" + '\n'
+            for node in server.groupInfo[group]:
+                state += node + '\n'
         committed_log = ''
         for idx in range(0, server.commitIndex):
             entry = server.log[idx]
@@ -443,6 +450,7 @@ def clientRequests(server, Msg, addr):
             print "server log"
             for logEntry in server.log:
                 print logEntry.command
+                print logEntry.addr
             server.save()
         # we need to redirect the request to leader
         else:
