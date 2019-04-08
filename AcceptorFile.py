@@ -11,6 +11,7 @@ import time
 import random
 
 from KThread import *
+from messages.base_message import BaseMessage
 from messages.log_messages import LogEntry
 from messages.config_messages import ConfigChange
 from messages.request_redirect import RequestRedirect
@@ -62,14 +63,14 @@ def appendEntriesMessage(server, Msg, addr):
                     if len(entries) != 0:
                         server.log = server.log[:prevLogIndex] + entries
                         matchIndex = len(server.log)
-                        if entries[0].type == 1:
+                        if entries[0].type == BaseMessage.RequestVoteMessage:
                             server.during_change = 1
                             server.new = entries[0].command.new_config[:]
                             server.old = server.peers[:]
                             server.old.append(server.id)
                             server.peers = list(set(server.old + server.new))
                             server.peers.remove(server.id)
-                        elif entries[0].type == 2:
+                        elif entries[0].type == BaseMessage.RequestVoteResponse:
                             server.during_change = 2
                             server.new = entries[0].command.new_config[:]
                             server.peers = server.new[:]
@@ -85,14 +86,14 @@ def appendEntriesMessage(server, Msg, addr):
             success = 'True'
             if len(entries) != 0:
                 server.log = server.log[:prevLogIndex] + entries
-                if entries[0].type == 1:
+                if entries[0].type == BaseMessage.RequestVoteMessage:
                     server.during_change = 1
                     server.new = entries[0].command.new_config[:]
                     server.old = server.peers[:]
                     server.old.append(server.id)
                     server.peers = list(set(server.old + server.new))
                     server.peers.remove(server.id)
-                elif entries[0].type == 2:
+                elif entries[0].type == BaseMessage.RequestVoteResponse:
                     server.during_change = 2
                     server.new = entries[0].command.new_config[:]
                     server.peers = server.new[:]
@@ -112,9 +113,9 @@ def appendEntriesMessage(server, Msg, addr):
         if server.commitIndex > lastApplied:
             server.poolsize = server.initial_state
             for idx in range(1, server.commitIndex + 1):
-                if server.log[idx - 1].type == 0:
+                if server.log[idx - 1].type == BaseMessage.AppendEntriesMessage:
                     server.poolsize -= server.log[idx - 1].command
-                elif server.log[idx - 1].type == 2:
+                elif server.log[idx - 1].type == BaseMessage.RequestVoteResponse:
                     server.during_change = 0
 
     reply_msg = AppendEntriesResponseMessage(server.id, _sender, server.currentTerm, success, matchIndex)
@@ -292,7 +293,7 @@ def appendEntriesResponse(server, Msg, addr):
                         server.commitIndex = N
                         poolsize = server.initial_state
                         for idx in range(1, N + 1):
-                            if server.log[idx - 1].type == 0:
+                            if server.log[idx - 1].type == BaseMessage.AppendEntriesMessage:
                                 poolsize -= server.log[idx - 1].command
                         server.poolsize = poolsize
                         server.save()
@@ -313,16 +314,15 @@ def appendEntriesResponse(server, Msg, addr):
                             if key in server.new:
                                 votes += 1
                     if votes == majority and server.log[N - 1].term == server.currentTerm:
-                        print '----------here 2----------'
                         for idx in range(server.commitIndex + 1, N + 1):
-                            if server.log[idx - 1].type == 0:
+                            if server.log[idx - 1].type == BaseMessage.AppendEntriesMessage:
                                 server.poolsize -= server.log[idx - 1].command
                                 server.save()
                                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                                 s.sendto('Your request is fullfilled', server.log[idx - 1].addr)
                                 s.close()
                                 server.commitIndex = idx
-                            elif server.log[idx - 1].type == 2:
+                            elif server.log[idx - 1].type == BaseMessage.RequestVoteResponse:
                                 server.commitIndex = idx
                                 time.sleep(1)
                                 if not server.id in server.new:
@@ -390,18 +390,18 @@ def clientRequests(server, Msg, addr):
         committed_log = ''
         for idx in range(0, server.commitIndex):
             entry = server.log[idx]
-            if entry.type == 0:
+            if entry.type == BaseMessage.AppendEntriesMessage:
                 committed_log += str(entry.command) + ' '
-            elif entry.type == 1:
+            elif entry.type == BaseMessage.RequestVoteMessage:
                 committed_log += 'new_old' + ' '
             else:
                 committed_log += 'new' + ' '
 
         all_log = ''
         for entry in server.log:
-            if entry.type == 0:
+            if entry.type == BaseMessage.AppendEntriesMessage:
                 all_log += str(entry.command) + ' '
-            elif entry.type == 1:
+            elif entry.type == BaseMessage.RequestVoteMessage:
                 all_log += 'new_old' + ' '
             else:
                 all_log += 'new' + ' '
@@ -417,8 +417,6 @@ def clientRequests(server, Msg, addr):
         ticket_num = int(msg_string.split()[1])
         if server.role == 'leader':
             print "I am the leader, customer wants to buy %d tickets" % ticket_num
-            print "server log"
-            print server.log
             if ticket_num > server.poolsize:
                 print 'Tickets not enough'
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -442,6 +440,9 @@ def clientRequests(server, Msg, addr):
             s.sendto('The Leader gets your request', addr)
             s.close()
             server.log.append(newEntry)
+            print "server log"
+            for logEntry in server.log:
+                print logEntry.command
             server.save()
         # we need to redirect the request to leader
         else:
