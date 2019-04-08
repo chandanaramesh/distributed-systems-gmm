@@ -10,13 +10,13 @@ from messages.base_message import BaseMessage
 logger = logging.getLogger(__name__)
 
 class ServerConfig(object):
-    def __init__(self, poolsize, currentTerm, votedFor, log, peers):
-        self.poolsize = poolsize
+    def __init__(self, groupInfo, currentTerm, votedFor, log, peers):
+        self.groupInfo = groupInfo
         self.currentTerm = currentTerm
         self.votedFor = votedFor
         self.log = log
         self.peers = peers
-        logger.debug('Server Configuration: poolsize = {}, currentTerm = {}, votedFor = {}. log = {}, peers = {}'.format(poolsize, currentTerm, votedFor, log, peers))
+        logger.debug('Server Configuration: poolsize = {}, currentTerm = {}, votedFor = {}. log = {}, peers = {}'.format(groupInfo, currentTerm, votedFor, log, peers))
         # self.new_quorom = new_quorom
 
 class ConfigChange(object):
