@@ -18,6 +18,7 @@ class BaseMessage(object):
     ChangeMessage = 4
     RedirectMessage = 5
     ClientMessage = 6
+    LocalMessageAddress = None
 
     def __init__(self, sender, receiver, term):
         self.sender = sender
