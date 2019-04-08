@@ -46,8 +46,10 @@ class ClientRequestor(object):
             try:
                 reply, addr = s.recvfrom(1024)
                 if reply != '':
-                    print 'Pool Size', reply
+                    print reply
                     break
+                else:
+                    print 'Did not receive reply from server within the timeout time of '+str(SHOW_STATE_TIMEOUT)
             except Exception as e:
                 print 'Connection refused'
 
