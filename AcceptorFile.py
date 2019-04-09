@@ -9,6 +9,8 @@ import socket
 import pickle
 import time
 import random
+import uuid
+import json
 
 from KThread import *
 from messages.base_message import BaseMessage
@@ -18,7 +20,7 @@ from messages.request_redirect import RequestRedirect
 from messages.vote_messages import VoteResponseMessage
 from messages.append_entries_messages import AppendEntriesResponseMessage
 
-from commons.Constants import DEBUG, ACCEPTOR
+from commons.Constants import DEBUG, ACCEPTOR, SERVER_NODE_GROUP_NAME
 
 
 def acceptor(server, data, addr):
@@ -107,6 +109,7 @@ def appendEntriesMessage(server, Msg, addr):
     else:
         success = 'False'
 
+    # TODO - Update here for fast update
     if leaderCommit > server.commitIndex:
         lastApplied = server.commitIndex
         server.commitIndex = min(leaderCommit, len(server.log))
@@ -236,11 +239,12 @@ def requestVote(server, Msg, addr):
     s.sendto(pickle.dumps(reply_msg), ("", server.addressbook[_sender]))
 
 
-def appendEntriesResponse(server, Msg, addr):
-    _sender = Msg.sender
-    _term = Msg.term
-    success = Msg.success
-    matchIndex = Msg.matchIndex
+def appendEntriesResponse(server, message, addr):
+    print 'Received message from ' + str(message.sender)
+    _sender = message.sender
+    _term = message.term
+    success = message.success
+    matchIndex = message.matchIndex
 
     if success == 'False':
         if _term > server.currentTerm:
@@ -268,7 +272,7 @@ def appendEntriesResponse(server, Msg, addr):
                         for idx in range(server.commitIndex + 1, N + 1):
                             server.groupInfo = server.log[idx - 1].command
                             server.save()
-                            if server.log[idx - 1].addr is not None: # To Handle Local Messages
+                            if server.log[idx - 1].addr is not None:  # To Handle Local Messages
                                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                                 s.sendto('Your request is fullfilled', server.log[idx - 1].addr)
                                 s.close()
@@ -318,6 +322,13 @@ def appendEntriesResponse(server, Msg, addr):
                         for idx in range(server.commitIndex + 1, N + 1):
                             if server.log[idx - 1].type == BaseMessage.AppendEntriesMessage:
                                 server.groupInfo = server.log[idx - 1].command
+                                server.groupInfo[SERVER_NODE_GROUP_NAME][message.sender].nodeAge += 1
+                                server.groupInfo[SERVER_NODE_GROUP_NAME][server.id].nodeAge += 1
+                                _uuid = uuid.uuid1()
+                                logEntry = LogEntry(server.currentTerm, server.groupInfo,
+                                                    BaseMessage.LocalMessageAddress,
+                                                    _uuid)
+                                server.log.append(logEntry)
                                 server.save()
                                 if server.log[idx - 1].addr is not None:
                                     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -335,7 +346,13 @@ def appendEntriesResponse(server, Msg, addr):
                                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                                 s.sendto('Your request is fullfilled', server.log[idx - 1].addr)
                                 s.close()
-                        # print 'send new once'
+    server.groupInfo[SERVER_NODE_GROUP_NAME][message.sender].nodeAge += 1
+    server.groupInfo[SERVER_NODE_GROUP_NAME][server.id].nodeAge += 1
+    _uuid = uuid.uuid1()
+    logEntry = LogEntry(server.currentTerm, server.groupInfo, BaseMessage.LocalMessageAddress, _uuid)
+    server.log.append(logEntry)
+    print 'Age Updated for self ' + str(server.id) + ' and peer ' + str(message.sender)
+    # print 'send new once'
 
 
 def changeConfig(server, Msg, addr):
@@ -388,34 +405,14 @@ def clientRequests(server, Msg, addr):
     # addr = Msg.addr
     msg_string = Msg.request_msg
     if msg_string == 'show':
-        state = ''
+        groupMap = {}
         for group in server.groupInfo:
-            state += "Group Name = " + group + '\n'
-            state += "Nodes/Process in Group:" + '\n'
+            nodeMap = {}
             for node in server.groupInfo[group]:
-                state += node + '\n'
-        committed_log = ''
-        for idx in range(0, server.commitIndex):
-            entry = server.log[idx]
-            if entry.type == BaseMessage.AppendEntriesMessage:
-                committed_log += str(entry.command) + ' '
-            elif entry.type == BaseMessage.RequestVoteMessage:
-                committed_log += 'new_old' + ' '
-            else:
-                committed_log += 'new' + ' '
-
-        all_log = ''
-        for entry in server.log:
-            if entry.type == BaseMessage.AppendEntriesMessage:
-                all_log += str(entry.command) + ' '
-            elif entry.type == BaseMessage.RequestVoteMessage:
-                all_log += 'new_old' + ' '
-            else:
-                all_log += 'new' + ' '
-
-        show_msg = 'state machine: ' + str(
-            state) + '\n' + 'committed log: ' + committed_log + '\n' + 'all log:' + all_log + '\n' + 'status: ' + str(
-            server.during_change)
+                nodeMap[node] = server.groupInfo[group][node].getJson()
+            groupMap[group] = nodeMap
+        state = json.dumps(groupMap)
+        show_msg = str(state)
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.sendto(show_msg, addr)
         s.close()
