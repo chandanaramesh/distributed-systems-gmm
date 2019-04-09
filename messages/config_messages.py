@@ -6,6 +6,7 @@ Created on Thu Apr  4 13:27:50 2019
 """
 import logging
 from messages.base_message import BaseMessage
+from commons.Constants import DEBUG, MESSAGES_MODELS
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,8 @@ class ServerConfig(object):
         self.votedFor = votedFor
         self.log = log
         self.peers = peers
-        logger.debug('Server Configuration: poolsize = {}, currentTerm = {}, votedFor = {}. log = {}, peers = {}'.format(groupInfo, currentTerm, votedFor, log, peers))
+        if DEBUG or MESSAGES_MODELS:
+            logger.debug('Server Configuration: poolsize = {}, currentTerm = {}, votedFor = {}. log = {}, peers = {}'.format(groupInfo, currentTerm, votedFor, log, peers))
         # self.new_quorom = new_quorom
 
 class ConfigChange(object):
@@ -26,4 +28,5 @@ class ConfigChange(object):
         self.addr = addr
         self.phase = phase
         self.type = BaseMessage.ChangeMessage
-        logger.debug('Config Change: new_config = {}, uuid = {}, phase = {}, addr = {}'.format(new_config, uuid, phase, addr))
+        if DEBUG or MESSAGES_MODELS:
+            logger.debug('Config Change: new_config = {}, uuid = {}, phase = {}, addr = {}'.format(new_config, uuid, phase, addr))

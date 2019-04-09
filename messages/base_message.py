@@ -7,6 +7,8 @@ Created on Thu Apr  4 13:16:23 2019
 
 import logging
 
+from commons.Constants import DEBUG, MESSAGES_MODELS
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,4 +26,5 @@ class BaseMessage(object):
         self.sender = sender
         self.receiver = receiver
         self.term = term
-        logger.debug('Base Message Init. Sender = {}, Receiver = {}, term = {}'.format(sender, receiver, term))
+        if DEBUG or MESSAGES_MODELS:
+            logger.debug('Base Message Init. Sender = {}, Receiver = {}, term = {}'.format(sender, receiver, term))
