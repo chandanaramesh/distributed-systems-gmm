@@ -15,6 +15,7 @@ from messages.append_entries_messages import AppendEntriesMessage
 from messages.vote_messages import RequestForVoteMessage
 from messages.config_messages import ServerConfig
 from messages.base_message import BaseMessage
+from messages.node_information import NodeInformation
 from AcceptorFile import *
 
 from commons.Constants import DEBUG, SERVER_NODE_GROUP_NAME
@@ -154,10 +155,12 @@ class Server(object):
         for peer in self.peers:
             self.nextIndex[peer] = len(self.log) + 1
             self.matchIndex[peer] = 0
-        nodes = []
-        nodes.append(self._formFriendlyName(self.id))
+        nodes = {}
+        leaderNodeInfo = NodeInformation(self.id, self._formFriendlyName(self.id), 1)
+        nodes[self.id] = leaderNodeInfo
         for peer in self.peers:
-            nodes.append(self._formFriendlyName(peer))
+            peerNodeInfo = NodeInformation(peer, self._formFriendlyName(peer), 1)
+            nodes[peer] = peerNodeInfo
         self.initialState[SERVER_NODE_GROUP_NAME] = nodes
         _uuid = uuid.uuid1()
         newAppendLogEntry = LogEntry(self.currentTerm, self.initialState, BaseMessage.LocalMessageAddress, _uuid)
@@ -199,7 +202,7 @@ class Server(object):
                 data = pickle.dumps(msg)
                 sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
                 sock.sendto(data, ("", self.addressbook[peer]))
-            time.sleep(0.5)
+            time.sleep(1)
 
     def stepDown(self):
         logger.info('Server stepDown Method')
