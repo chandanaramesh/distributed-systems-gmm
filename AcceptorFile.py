@@ -9,13 +9,19 @@ import socket
 import pickle
 import time
 import random
+import json
 
 from KThread import *
+from messages.base_message import BaseMessage
 from messages.log_messages import LogEntry
 from messages.config_messages import ConfigChange
 from messages.request_redirect import RequestRedirect
 from messages.vote_messages import VoteResponseMessage
 from messages.append_entries_messages import AppendEntriesResponseMessage
+from messages.heartbeat_messages import HeartBeatResponseMessage
+
+from commons.Constants import DEBUG, ACCEPTOR
+
 
 def acceptor(server, data, addr):
     Msg = pickle.loads(data)
@@ -28,7 +34,9 @@ def acceptor(server, data, addr):
         3: appendEntriesResponse,
         4: changeConfig,
         5: clientRequests,
-        6: clientRequests
+        6: clientRequests,
+        7: heartbeatRequests,
+        8: heartbeatResponse
     }
 
     switch[_type](server, Msg, addr)
@@ -48,7 +56,7 @@ def appendEntriesMessage(server, Msg, addr):
     if _term >= server.currentTerm:
         server.currentTerm = _term
         server.save()
-        server.step_down()
+        server.stepDown()
         if server.role == 'follower':
             server.last_update = time.time()
         if prevLogIndex != 0:
@@ -59,20 +67,19 @@ def appendEntriesMessage(server, Msg, addr):
                     if len(entries) != 0:
                         server.log = server.log[:prevLogIndex] + entries
                         matchIndex = len(server.log)
-                        if entries[0].type == 1:
+                        if entries[0].type == BaseMessage.RequestVoteMessage:
                             server.during_change = 1
                             server.new = entries[0].command.new_config[:]
                             server.old = server.peers[:]
                             server.old.append(server.id)
                             server.peers = list(set(server.old + server.new))
                             server.peers.remove(server.id)
-                        elif entries[0].type == 2:
+                        elif entries[0].type == BaseMessage.RequestVoteResponse:
                             server.during_change = 2
                             server.new = entries[0].command.new_config[:]
                             server.peers = server.new[:]
                             server.peers.remove(server.id)
-                            print
-                            'follower applied new config, running peers', server.peers
+                            print 'follower applied new config, running peers', server.peers
                             server.save()
                 else:
                     success = 'False'
@@ -82,20 +89,19 @@ def appendEntriesMessage(server, Msg, addr):
             success = 'True'
             if len(entries) != 0:
                 server.log = server.log[:prevLogIndex] + entries
-                if entries[0].type == 1:
+                if entries[0].type == BaseMessage.RequestVoteMessage:
                     server.during_change = 1
                     server.new = entries[0].command.new_config[:]
                     server.old = server.peers[:]
                     server.old.append(server.id)
                     server.peers = list(set(server.old + server.new))
                     server.peers.remove(server.id)
-                elif entries[0].type == 2:
+                elif entries[0].type == BaseMessage.RequestVoteResponse:
                     server.during_change = 2
                     server.new = entries[0].command.new_config[:]
                     server.peers = server.new[:]
                     server.peers.remove(server.id)
-                    print
-                    'follower applied new config, running peers', server.peers
+                    print 'follower applied new config, running peers', server.peers
 
                 server.save()
                 matchIndex = len(server.log)
@@ -107,11 +113,11 @@ def appendEntriesMessage(server, Msg, addr):
         lastApplied = server.commitIndex
         server.commitIndex = min(leaderCommit, len(server.log))
         if server.commitIndex > lastApplied:
-            server.poolsize = server.initial_state
+            server.groupInfo = server.initialState
             for idx in range(1, server.commitIndex + 1):
-                if server.log[idx - 1].type == 0:
-                    server.poolsize -= server.log[idx - 1].command
-                elif server.log[idx - 1].type == 2:
+                if server.log[idx - 1].type == BaseMessage.AppendEntriesMessage:
+                    server.groupInfo = server.log[idx - 1].command
+                elif server.log[idx - 1].type == BaseMessage.RequestVoteResponse:
                     server.during_change = 0
 
     reply_msg = AppendEntriesResponseMessage(server.id, _sender, server.currentTerm, success, matchIndex)
@@ -123,7 +129,8 @@ def responseVote(server, Msg, addr):
     _sender = Msg.sender
     _term = Msg.term
     _msg = Msg.data
-    print '---------Get vote response message---------'
+    if DEBUG or ACCEPTOR:
+        print '---------Get vote response message---------'
     voteGranted = int(_msg)
     if voteGranted:
         if server.during_change == 0:
@@ -131,14 +138,14 @@ def responseVote(server, Msg, addr):
                 server.request_votes.remove(_sender)
                 server.numVotes += 1
                 if server.numVotes == server.majority:
-                    print 'Get majority votes, become leader at Term %d' % server.currentTerm
+                    print 'Got majority votes, become leader at Term %d' % server.currentTerm
                     if server.election.is_alive():
                         server.election.kill()
                     # becomes a leader
                     server.role = 'leader'
                     server.follower_state.kill()
-                    print 'new leader ',server.id, ' during change 0'
-                    server.leader_state = KThread(target = server.leader, args = ())
+                    print 'new leader ', server.id, ' during change 0'
+                    server.leader_state = KThread(target=server.leader, args=())
                     server.leader_state.start()
         elif server.during_change == 1:
             server.request_votes.remove(_sender)
@@ -146,8 +153,8 @@ def responseVote(server, Msg, addr):
                 server.oldVotes += 1
             if _sender in server.new:
                 server.newVotes += 1
-            majority_1 = len(server.old)/2 + 1
-            majority_2 = len(server.new)/2 + 1
+            majority_1 = len(server.old) / 2 + 1
+            majority_2 = len(server.new) / 2 + 1
             if server.oldVotes >= majority_1 and server.newVotes >= majority_2:
                 print 'Get majority from both old and new, become leader at Term %d' % server.currentTerm
                 if server.election.is_alive():
@@ -155,33 +162,34 @@ def responseVote(server, Msg, addr):
                 server.role = 'leader'
                 print 'new leader ', server.id, ' during change 1'
                 server.follower_state.kill()
-                server.leader_state = KThread(target = server.leader, args = ())
+                server.leader_state = KThread(target=server.leader, args=())
                 server.leader_state.start()
         else:
             server.request_votes.remove(_sender)
             if _sender in server.peers:
                 server.newVotes += 1
-            majority = len(server.new)/2 + 1
+            majority = len(server.new) / 2 + 1
             if server.newVotes >= majority:
-                print 'Get majority from new, become leader at Term %d' % server.currentTerm
+                print 'Got majority from new, become leader at Term %d' % server.currentTerm
                 if server.election.is_alive():
                     server.election.kill()
                 server.role = 'leader'
                 print 'new leader ', server.id
                 server.follower_state.kill()
-                server.leader_state = KThread(target = server.leader, args = ())
+                server.leader_state = KThread(target=server.leader, args=())
                 server.leader_state.start()
 
 
     else:
-        if _term > server.currentTerm: # discover higher term
+        if _term > server.currentTerm:  # discover higher term
             server.currentTerm = _term
             server.save()
+            if DEBUG or ACCEPTOR:
+                print 'Server '
             if server.role == 'candidate':
-                server.step_down()
+                server.stepDown()
 
-        print 'vote rejected by ',_sender,' to ',server.id
-
+        #print 'vote rejected by ', _sender, ' to ', server.id
 
 
 def requestVote(server, Msg, addr):
@@ -190,16 +198,22 @@ def requestVote(server, Msg, addr):
     if _sender not in server.peers:
         return
     _msg = Msg.data
-    print '---------Get requestvote message--------- votes needed from  ', server.id, " ", server.currentTerm ," for ", _sender," term ",_term
+    if DEBUG or ACCEPTOR:
+        # TODO: Make the message better
+        print '---------Get requestvote message--------- votes needed from  ', server.id, " ", server.currentTerm, " for ", _sender, " term ", _term
+
     _msg = _msg.split()
     log_info = (int(_msg[0]), int(_msg[1]))
     if _term < server.currentTerm:
-        print 'rejected due to old term by ',server.id
+        if DEBUG or ACCEPTOR:
+            print 'rejected due to old term by ', server.id
         voteGranted = 0
     elif _term == server.currentTerm:
-        if log_info >= (server.lastLogTerm, server.lastLogIndex) and (server.votedFor == -1 or server.votedFor == _sender):
+        if log_info >= (server.lastLogTerm, server.lastLogIndex) and (
+                server.votedFor == -1 or server.votedFor == _sender):
             voteGranted = 1
             server.votedFor = _sender
+            print 'voted for ',_sender ,'by ', server.id
             server.save()
         else:
             voteGranted = 0
@@ -207,20 +221,22 @@ def requestVote(server, Msg, addr):
         # find higher term in RequestForVoteMessage
         server.currentTerm = _term
         server.save()
-        server.step_down()
+        server.stepDown()
 
         if log_info >= (server.lastLogTerm, server.lastLogIndex):
             voteGranted = 1
             server.votedFor = _sender
-            print 'found higher term.. log matched.. stepped down..given vote to ',_sender,' by ', server.id
+            if DEBUG or ACCEPTOR:
+                print 'found higher term.. log matched.. stepped down..given vote to ', _sender, ' by ', server.id
             server.save()
         else:
             voteGranted = 0
-            print 'found higher term.. log mismatched.. stepped down..rejected vote to ', _sender, ' by ', server.id
+            if DEBUG or ACCEPTOR:
+                print 'found higher term.. log mismatched.. stepped down..rejected vote to ', _sender, ' by ', server.id
     reply = str(voteGranted)
     reply_msg = VoteResponseMessage(server.id, _sender, server.currentTerm, reply)
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.sendto(pickle.dumps(reply_msg), ("",server.addressbook[_sender]))
+    s.sendto(pickle.dumps(reply_msg), ("", server.addressbook[_sender]))
 
 
 def appendEntriesResponse(server, Msg, addr):
@@ -233,7 +249,7 @@ def appendEntriesResponse(server, Msg, addr):
         if _term > server.currentTerm:
             server.currentTerm = _term
             server.save()
-            server.step_down()
+            server.stepDown()
         else:
             server.nextIndex[_sender] -= 1
     else:
@@ -243,26 +259,29 @@ def appendEntriesResponse(server, Msg, addr):
 
         if server.commitIndex < max(server.matchIndex.values()):
             start = server.commitIndex + 1
-            for N in range(start,max(server.matchIndex.values()) + 1):
+            for N in range(start, max(server.matchIndex.values()) + 1):
                 if server.during_change == 0:
                     # not in config change
                     compare = 1
                     for key, item in server.matchIndex.items():
                         if key in server.peers and item >= N:
                             compare += 1
-                    majority = (len(server.peers) + 1)/2 + 1
-                    if compare == server.majority and server.log[N-1].term == server.currentTerm:
+                    majority = (len(server.peers) + 1) / 2 + 1
+                    if compare == server.majority and server.log[N - 1].term == server.currentTerm:
                         for idx in range(server.commitIndex + 1, N + 1):
-                            server.poolsize -= server.log[idx-1].command
+                            server.groupInfo = server.log[idx - 1].command
                             server.save()
-                            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                            s.sendto('Your request is fullfilled',server.log[idx-1].addr)
-                            s.close()
-                            print 'reply once'
+                            if server.log[idx - 1].addr is not None: # To Handle Local Messages
+                                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                                s.sendto('Your request is fullfilled', server.log[idx - 1].addr)
+                                s.close()
+                            if DEBUG or ACCEPTOR:
+                                print 'Replied to the client'
                         server.commitIndex = N
+
                 elif server.during_change == 1:
-                    majority_1 = len(server.old)/2 + 1
-                    majority_2 = len(server.new)/2 + 1
+                    majority_1 = len(server.old) / 2 + 1
+                    majority_2 = len(server.new) / 2 + 1
                     votes_1 = 0
                     votes_2 = 0
                     if server.id in server.old:
@@ -275,21 +294,23 @@ def appendEntriesResponse(server, Msg, addr):
                                 votes_1 += 1
                             if key in server.new:
                                 votes_2 += 1
-                    if votes_1 >= majority_1 and votes_2 >= majority_2 and server.log[N-1].term == server.currentTerm:
+                    if votes_1 >= majority_1 and votes_2 >= majority_2 and server.log[N - 1].term == server.currentTerm:
                         server.commitIndex = N
-                        poolsize = server.initial_state
+                        groupInfo = server.initialState
                         for idx in range(1, N + 1):
-                            if server.log[idx-1].type == 0:
-                                poolsize -= server.log[idx-1].command
-                        server.poolsize = poolsize
+                            if server.log[idx - 1].type == BaseMessage.AppendEntriesMessage:
+                                groupInfo = server.log[idx - 1].command
+                        server.groupInfo = groupInfo
                         server.save()
                         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                        s.sendto('Your request is fullfilled',server.log[idx-1].addr)
+                        s.sendto('Your request is fullfilled', server.log[idx - 1].addr)
+                        print 'Server log = '
+                        print server.log
                         s.close()
                     # print 'send old_new once'
 
                 else:
-                    majority = len(server.new)/2 + 1
+                    majority = len(server.new) / 2 + 1
                     votes = 0
                     if server.id in server.new:
                         votes = 1
@@ -297,30 +318,28 @@ def appendEntriesResponse(server, Msg, addr):
                         if item >= N:
                             if key in server.new:
                                 votes += 1
-                    if votes == majority and server.log[N-1].term == server.currentTerm:
-                        print '----------here 2----------'
+                    if votes == majority and server.log[N - 1].term == server.currentTerm:
                         for idx in range(server.commitIndex + 1, N + 1):
-                            if server.log[idx-1].type == 0:
-                                server.poolsize -= server.log[idx-1].command
+                            if server.log[idx - 1].type == BaseMessage.AppendEntriesMessage:
+                                server.groupInfo = server.log[idx - 1].command
                                 server.save()
-                                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                                s.sendto('Your request is fullfilled',server.log[idx-1].addr)
-                                s.close()
+                                if server.log[idx - 1].addr is not None:
+                                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                                    s.sendto('Your request is fullfilled', server.log[idx - 1].addr)
+                                    s.close()
                                 server.commitIndex = idx
-                            elif server.log[idx-1].type == 2:
+                            elif server.log[idx - 1].type == BaseMessage.RequestVoteResponse:
                                 server.commitIndex = idx
                                 time.sleep(1)
                                 if not server.id in server.new:
                                     print 'I am not in the new configuration'
-                                    server.step_down()
+                                    server.stepDown()
                                 server.during_change = 0
                                 server.save()
                                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                                s.sendto('Your request is fullfilled',server.log[idx-1].addr)
+                                s.sendto('Your request is fullfilled', server.log[idx - 1].addr)
                                 s.close()
                         # print 'send new once'
-
-
 
 
 def changeConfig(server, Msg, addr):
@@ -338,7 +357,7 @@ def changeConfig(server, Msg, addr):
         server.peers.remove(server.id)
         server.save()
         print 'Config change phase 1 applied'
-    #return
+    # return
     else:
         print 'Config change phase 2 ', server.id, " ", server.currentTerm
         server.during_change = 2
@@ -363,39 +382,44 @@ def changeConfig(server, Msg, addr):
             addr = Msg.addr
         redirect_msg = ConfigChange(Msg.new_config, Msg.uuid, Msg.phase, addr)
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.sendto(pickle.dumps(redirect_msg), ("",server.addressbook[redirect_target]))
+        s.sendto(pickle.dumps(redirect_msg), ("", server.addressbook[redirect_target]))
         s.close()
 
     return
 
 
 def clientRequests(server, Msg, addr):
-
-    addr = Msg.addr
-
+    # addr = Msg.addr
     msg_string = Msg.request_msg
     if msg_string == 'show':
-        state = server.poolsize
+        state = ''
+        for group in server.groupInfo:
+            state += "Group Name = " + group + '\n'
+            state += "Nodes/Process in Group:" + '\n'
+            for node in server.groupInfo[group]:
+                state += node + '\n'
         committed_log = ''
-        for idx in range(0,server.commitIndex):
+        for idx in range(0, server.commitIndex):
             entry = server.log[idx]
-            if entry.type == 0:
+            if entry.type == BaseMessage.AppendEntriesMessage:
                 committed_log += str(entry.command) + ' '
-            elif entry.type == 1:
+            elif entry.type == BaseMessage.RequestVoteMessage:
                 committed_log += 'new_old' + ' '
             else:
                 committed_log += 'new' + ' '
 
         all_log = ''
         for entry in server.log:
-            if entry.type == 0:
+            if entry.type == BaseMessage.AppendEntriesMessage:
                 all_log += str(entry.command) + ' '
-            elif entry.type == 1:
+            elif entry.type == BaseMessage.RequestVoteMessage:
                 all_log += 'new_old' + ' '
             else:
                 all_log += 'new' + ' '
 
-        show_msg = 'state machine: ' + str(state) + '\n' + 'committed log: ' + committed_log + '\n' + 'all log:' + all_log + '\n' + 'status: ' + str(server.during_change)
+        show_msg = 'state machine: ' + str(
+            state) + '\n' + 'committed log: ' + committed_log + '\n' + 'all log:' + all_log + '\n' + 'status: ' + str(
+            server.during_change)
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.sendto(show_msg, addr)
         s.close()
@@ -404,7 +428,6 @@ def clientRequests(server, Msg, addr):
         ticket_num = int(msg_string.split()[1])
         if server.role == 'leader':
             print "I am the leader, customer wants to buy %d tickets" % ticket_num
-
             if ticket_num > server.poolsize:
                 print 'Tickets not enough'
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -419,15 +442,19 @@ def clientRequests(server, Msg, addr):
                         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                         s.sendto('Your request has been fullfilled', addr)
                         s.close()
-                    else: # ignore
+                    else:  # ignore
                         pass
-                    return # ignore this new command
+                    return  # ignore this new command
 
             newEntry = LogEntry(server.currentTerm, ticket_num, addr, Msg.uuid)
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.sendto('The Leader gets your request', addr)
             s.close()
             server.log.append(newEntry)
+            print "server log"
+            for logEntry in server.log:
+                print logEntry.command
+                print logEntry.addr
             server.save()
         # we need to redirect the request to leader
         else:
@@ -438,7 +465,57 @@ def clientRequests(server, Msg, addr):
                 redirect_target = random.choice(server.peers)
             redirect_msg = RequestRedirect(msg_string, Msg.uuid, addr)
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.sendto(pickle.dumps(redirect_msg), ("",server.addressbook[redirect_target]))
+            s.sendto(pickle.dumps(redirect_msg), ("", server.addressbook[redirect_target]))
             s.close()
     return
 
+
+def heartbeatRequests(server, Msg, addr):
+    _sender = Msg.sender
+    try:
+        server
+        #print 'member alive present'
+    except NameError:
+        #print "server dead"
+        return
+
+    if hasattr(server,'alive') and  server.alive == True:
+        print ' peer found ..', server.id
+        success = True
+        reply_msg = HeartBeatResponseMessage(server.id, _sender, server.currentTerm, success)
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.sendto(pickle.dumps(reply_msg), ("", server.addressbook[_sender]))
+        #s.close()
+    else:
+        success = False
+
+
+
+
+def heartbeatResponse(server, Msg, addr):
+    _sender = Msg.sender
+    success = Msg.success
+    if success == True:
+        aliveNodes = server.peers
+        aliveNodes.append(_sender)
+        aliveNodes.sort()
+        #server.peers = list(set(aliveNodes))
+        #aliveNodes = server.peers
+        #print 'peers updated...' , server.peers
+        #server.save()
+
+        #wrtie to the config.json file
+        with open('config.json', 'r') as jsonFile:
+            contents = json.load(jsonFile)
+
+        #print 'old nodes---' ,contents["alive"]
+        aliveNodes.append(server.id)
+        aliveNodes.sort()
+        contents["alive"] = list(set(aliveNodes))
+
+        with open('config.json', 'w') as jsonFile:
+            json.dump(contents, jsonFile)
+        time.sleep(1)
+
+    else:
+        print ' reposnse is false '
