@@ -6,7 +6,7 @@ import logging
 # Logging configuration
 LOG_FILENAME = 'logs/GroupManagement'
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-DEBUG_LEVEL = logging.DEBUG
+DEBUG_LEVEL = logging.INFO
 
 
 # SERVER NODES GROUP NAME
