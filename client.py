@@ -1,11 +1,13 @@
-import socket
-import json
-import pickle
-import uuid
+import os
 import time
+import uuid
+import json
+import socket
+import pickle
+import logging
+import argparse
 
 from KThread import *
-#from MessageModels import *
 from messages.config_messages import ConfigChange
 from messages.request_redirect import Request
 
@@ -13,12 +15,22 @@ SHOW_STATE_TIMEOUT = 5
 CHANGE_CONFIG_TIMEOUT = 20
 BUY_TICKETS_TIMEOUT = 20
 
+INTERACTIVE_MODE = True
+LOG_LEVEL = logging.DEBUG
+LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+SERVER_IDS_AVAILABLE = "ID of the server [1-%d]"
+
+logger = logging.getLogger(__name__)
+
+
 class ClientRequestor(object):
     cnt = 0
+
     def __init__(self):
         ClientRequestor.cnt = ClientRequestor.cnt + 1
         self.id = ClientRequestor.cnt
-        self.num_of_reply = 0 
+        self.num_of_reply = 0
 
     def buyTickets(self, port, buy_msg, uuid):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -34,14 +46,13 @@ class ClientRequestor(object):
                     break
             except Exception as e:
                 print 'Connection refused'
- 
         s.close()
 
     def showState(self, port):
-        print 'Making request to show'
+        logger.info('Making request to show')
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         msg = Request('show')
-        s.sendto(pickle.dumps(msg),("",port))
+        s.sendto(pickle.dumps(msg), ("", port))
         while 1:
             try:
                 reply, addr = s.recvfrom(1024)
@@ -49,35 +60,18 @@ class ClientRequestor(object):
                     print reply
                     break
                 else:
-                    print 'Did not receive reply from server within the timeout time of '+str(SHOW_STATE_TIMEOUT)
+                    print 'Did not receive reply from server within the timeout time of ' + str(SHOW_STATE_TIMEOUT)
             except Exception as e:
                 print 'Connection refused'
 
-    def configChange(self, port, new_config, uuid):
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        msg = ConfigChange(new_config, uuid, 1)
-        s.sendto(pickle.dumps(msg),("",port))
-        # we need to get committed twice
-        while 1:
-            try:
-                reply, addr = s.recvfrom(1024)
-                if reply != '':
-                    self.num_of_reply != 1
-                    print reply
-                    break
-            except Exception as e:
-                print 'Connection refused'
-        msg = ConfigChange(new_config, uuid, 2)
-        s.sendto(pickle.dumps(msg), ("",port))
-        while 1:
-            try:
-                reply, addr = s.recvfrom(1024)
-                if reply != '':
-                    print reply
-                    break
-            except Exception as e:
-                print 'Connection refused'
-        s.close()
+
+def init():
+    setupLogging()
+    logger.info('Client Setup started')
+    ports, num_ports = readConfig()
+    logger.info('Number of nodes = {}'.format(str(num_ports)))
+    args = setupClient(num_ports)
+    return args, ports, num_ports
 
 
 def readConfig():
@@ -93,39 +87,87 @@ def readConfig():
         exit()
 
 
+def setupLogging():
+    global logger
+    if not os.path.exists('./logs'):
+        os.makedirs('./logs')
+    logging.basicConfig(filename='./logs/clientLogs.log', level=LOG_LEVEL,
+                        format=LOG_FORMAT)
+    logger = logging.getLogger(__name__)
+
+
+def setupClient(num_ports):
+    global SERVER_IDS_AVAILABLE
+    global INTERACTIVE_MODE
+    SERVER_IDS_AVAILABLE = SERVER_IDS_AVAILABLE % num_ports
+    args = parseArguments()
+    logger.debug('Non Interactive Args = {}'.format(args))
+    INTERACTIVE_MODE = args.no_interactive
+    return args
+
+
+def parseArguments():
+    logger.debug('Parsing the arguments')
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--no-interactive", "-ni", help="Disable Interative Mode", required=False, default=False, action='store_true')
+    parser.add_argument(
+        "--debug", "-d", help="Enable Debug Mode", required=False, action='store_true')
+    parser.add_argument(
+        "--server", "-s", help=SERVER_IDS_AVAILABLE, required=False, type=int)
+    parser.add_argument(
+        "--command", "-c", help="Any of the allowed command [show | add <groupId> <processId> "
+                                "| delete <groupId> <processId> | deleteGroup <GroupId>]", required=False, nargs='+')
+    args = parser.parse_args()
+    return args
+
+
 def showHandler(clientRequest, ports, serverId):
     requestThread = KThread(target=clientRequest.showState, args=(ports[serverId - 1],))
     timeout = SHOW_STATE_TIMEOUT
     return timeout, requestThread
 
-
-def changeHandler(request, clientRequestor, ports, serverId):
-    uuid_ = uuid.uuid1()
-    msg_split = request.split()
-    new_config_msg = msg_split[1:]
-    new_config = [int(item) for item in new_config_msg]
-    print new_config
-    requestThread = KThread(target=clientRequestor.configChange, args=(ports[serverId - 1], new_config, uuid_))
-    timeout = CHANGE_CONFIG_TIMEOUT
-
 def main():
-    ports, num_ports = readConfig()
-    while True:
+    args, ports, num_ports = init()
+    if not INTERACTIVE_MODE:
+        while True:
+            clientRequestor = ClientRequestor()
+            serverId = input('Which node do you want to connect to? [1-%d]: ' % num_ports)
+            print 'Accepted commands are [show | exit]'
+            request = raw_input('How can we help you? -- ')
+            if request == 'show':
+                print 'Delegating to show handler'
+                timeout, requestThread = showHandler(clientRequestor, ports, serverId)
+            elif request == 'exit':
+                print 'Thanks for using the Group Management Client! See you next time'
+                exit(0)
+            else:
+                uuid_ = uuid.uuid1()
+                requestThread = KThread(target=clientRequestor.buyTickets, args=(ports[serverId - 1], request, uuid_))
+                timeout = BUY_TICKETS_TIMEOUT
+            start_time = time.time()
+            requestThread.start()
+            while time.time() - start_time < timeout:
+                if not requestThread.is_alive():
+                    break
+            if requestThread.is_alive():
+                print 'Timeout! Try again'
+                requestThread.kill()
+    else:
+        command = ' '.join(args.command)
+        logger.info('Server = {}, command = {}'.format(str(args.server), command))
         clientRequestor = ClientRequestor()
-        serverId = input('Which node do you want to connect to? [1-%d]: ' % num_ports )
-        print 'Accepted commands are [show | change | exit]'
-        request = raw_input('How can we help you? -- ')
+        serverId = args.server
+        request = ' '.join(args.command)
         if request == 'show':
-            print 'Delegating to show handler'
+            logger.info('Delegating to show handler')
             timeout, requestThread = showHandler(clientRequestor, ports, serverId)
-        elif request.split()[0] == 'change':
-            timeout, requestThread = changeHandler(request, clientRequestor, ports, serverId)
         elif request == 'exit':
             print 'Thanks for using the Group Management Client! See you next time'
             exit(0)
         else:
             uuid_ = uuid.uuid1()
-            requestThread = KThread(target = clientRequestor.buyTickets, args =  (ports[serverId - 1], request, uuid_))
+            requestThread = KThread(target=clientRequestor.buyTickets, args=(ports[serverId - 1], request, uuid_))
             timeout = BUY_TICKETS_TIMEOUT
         start_time = time.time()
         requestThread.start()
@@ -135,6 +177,7 @@ def main():
         if requestThread.is_alive():
             print 'Timeout! Try again'
             requestThread.kill()
+
 
 if __name__ == '__main__':
     main()
