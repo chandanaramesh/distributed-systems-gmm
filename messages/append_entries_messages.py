@@ -13,7 +13,7 @@ class AppendEntriesMessage(BaseMessage):
 
     def __init__(self, sender, receiver, term, entries, commitIndex, prevLogIndex, prevLogTerm):
         BaseMessage.__init__(self, sender, receiver, term)
-        self.type = BaseMessage.AppendEntries
+        self.type = BaseMessage.AppendEntriesMessage
         self.entries = entries
         self.commitIndex = commitIndex
         self.prevLogTerm = prevLogTerm

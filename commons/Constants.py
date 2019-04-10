@@ -7,3 +7,10 @@ import logging
 LOG_FILENAME = 'logs/GroupManagement'
 LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 DEBUG_LEVEL = logging.DEBUG
+
+
+# SERVER NODES GROUP NAME
+SERVER_NODE_GROUP_NAME = 'NodesGroup'
+
+DEBUG = False
+ACCEPTOR = False

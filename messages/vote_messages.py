@@ -14,7 +14,7 @@ class RequestForVoteMessage(BaseMessage):
     def __init__(self, sender, receiver, term, data):
         BaseMessage.__init__(self, sender, receiver, term)
         self.data = data
-        self.type = BaseMessage.RequestVote
+        self.type = BaseMessage.RequestVoteMessage
         logger.debug('Request Vote Message. Message Type = {}, data = {}'.format(self.type, self.data))
 
 

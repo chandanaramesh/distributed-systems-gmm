@@ -64,6 +64,5 @@ class KThread(threading.Thread):
         return self.localtrace
 
     def kill(self):
-
         self.killed = True
 
