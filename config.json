@@ -1,5 +1,1 @@
-{
-	"AddressBook":[50001, 50002, 50003, 50004, 50005],
-	"running":[1,2,3,4,5],
-	"initial_state":100
-}
+{"running": [1, 2, 3, 4, 5], "initial_state": 100, "AddressBook": [50001, 50002, 50003, 50004, 50005], "alive": []}
