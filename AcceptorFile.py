@@ -5,12 +5,13 @@ Created on Fri Apr  5 16:24:03 2019
 @author: manda
 """
 
+import json
+import time
+import uuid
 import socket
 import pickle
-import time
 import random
-import uuid
-import json
+import logging
 
 from KThread import *
 from messages.base_message import BaseMessage
@@ -22,6 +23,7 @@ from messages.append_entries_messages import AppendEntriesResponseMessage
 
 from commons.Constants import DEBUG, ACCEPTOR, SERVER_NODE_GROUP_NAME
 
+logger = logging.getLogger(__name__)
 
 def acceptor(server, data, addr):
     Msg = pickle.loads(data)
@@ -240,11 +242,16 @@ def requestVote(server, Msg, addr):
 
 
 def appendEntriesResponse(server, message, addr):
-    print 'Received message from ' + str(message.sender)
+    print ''
+    print ''
+    print 'Received message from server' + str(message.sender)
     _sender = message.sender
     _term = message.term
     success = message.success
     matchIndex = message.matchIndex
+
+    print('*** Server %d *****' % server.id)
+    print(server.groupInfo)
 
     if success == 'False':
         if _term > server.currentTerm:
@@ -255,11 +262,18 @@ def appendEntriesResponse(server, message, addr):
             server.nextIndex[_sender] -= 1
     else:
         if server.nextIndex[_sender] <= len(server.log) and matchIndex > server.matchIndex[_sender]:
+            print 'Server logs length = %d' % len(server.log)
+            print 'Follower Match Index = %d' % matchIndex
+            print 'Server view of sender {} match Index = {}'.format(_sender, server.matchIndex[_sender])
+            print 'Server view of sender {} next index = {}'.format(_sender, server.nextIndex[_sender])
+            print 'Server Commit Index {}'.format(server.commitIndex)
             server.matchIndex[_sender] = matchIndex
             server.nextIndex[_sender] += 1
 
         if server.commitIndex < max(server.matchIndex.values()):
             start = server.commitIndex + 1
+            print 'Server Commit index = %d' % start
+            print 'Server Match Index Max = %d' % max(server.matchIndex.values())
             for N in range(start, max(server.matchIndex.values()) + 1):
                 if server.during_change == 0:
                     # not in config change
@@ -270,14 +284,24 @@ def appendEntriesResponse(server, message, addr):
                     majority = (len(server.peers) + 1) / 2 + 1
                     if compare == server.majority and server.log[N - 1].term == server.currentTerm:
                         for idx in range(server.commitIndex + 1, N + 1):
+                            # TODO: THis is where server config is overwritten from the log
+                            print '************* Hit the Error State of Resetting Group Info ************'
                             server.groupInfo = server.log[idx - 1].command
                             server.save()
+                            _uuid = uuid.uuid1()
+                            if message.sender in server.groupInfo[SERVER_NODE_GROUP_NAME]:
+                                server.groupInfo[SERVER_NODE_GROUP_NAME][message.sender].nodeAge += 1
+                            if server.id in server.groupInfo[SERVER_NODE_GROUP_NAME]:
+                                server.groupInfo[SERVER_NODE_GROUP_NAME][server.id].nodeAge += 1
+                            logEntry = LogEntry(server.currentTerm, server.groupInfo, BaseMessage.LocalMessageAddress,
+                                                _uuid)
+                            server.log.append(logEntry)
+                            print 'Age Updated for self ' + str(server.id) + ' and peer server ' + str(message.sender)
                             if server.log[idx - 1].addr is not None:  # To Handle Local Messages
                                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                                 s.sendto('Your request is fullfilled', server.log[idx - 1].addr)
                                 s.close()
-                            if DEBUG or ACCEPTOR:
-                                print 'Replied to the client'
+                            logger.debug('Replied to the client')
                         server.commitIndex = N
                 elif server.during_change == 1:
                     majority_1 = len(server.old) / 2 + 1
@@ -322,13 +346,6 @@ def appendEntriesResponse(server, message, addr):
                         for idx in range(server.commitIndex + 1, N + 1):
                             if server.log[idx - 1].type == BaseMessage.AppendEntriesMessage:
                                 server.groupInfo = server.log[idx - 1].command
-                                server.groupInfo[SERVER_NODE_GROUP_NAME][message.sender].nodeAge += 1
-                                server.groupInfo[SERVER_NODE_GROUP_NAME][server.id].nodeAge += 1
-                                _uuid = uuid.uuid1()
-                                logEntry = LogEntry(server.currentTerm, server.groupInfo,
-                                                    BaseMessage.LocalMessageAddress,
-                                                    _uuid)
-                                server.log.append(logEntry)
                                 server.save()
                                 if server.log[idx - 1].addr is not None:
                                     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -346,12 +363,6 @@ def appendEntriesResponse(server, message, addr):
                                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                                 s.sendto('Your request is fullfilled', server.log[idx - 1].addr)
                                 s.close()
-    server.groupInfo[SERVER_NODE_GROUP_NAME][message.sender].nodeAge += 1
-    server.groupInfo[SERVER_NODE_GROUP_NAME][server.id].nodeAge += 1
-    _uuid = uuid.uuid1()
-    logEntry = LogEntry(server.currentTerm, server.groupInfo, BaseMessage.LocalMessageAddress, _uuid)
-    server.log.append(logEntry)
-    print 'Age Updated for self ' + str(server.id) + ' and peer ' + str(message.sender)
     # print 'send new once'
 
 
