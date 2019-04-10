@@ -17,8 +17,7 @@ class ServerConfig(object):
         self.votedFor = votedFor
         self.log = log
         self.peers = peers
-        if DEBUG or MESSAGES_MODELS:
-            logger.debug('Server Configuration: poolsize = {}, currentTerm = {}, votedFor = {}. log = {}, peers = {}'.format(groupInfo, currentTerm, votedFor, log, peers))
+        logger.debug('Server Configuration: poolsize = {}, currentTerm = {}, votedFor = {}. log = {}, peers = {}'.format(groupInfo, currentTerm, votedFor, log, peers))
         # self.new_quorom = new_quorom
 
 class ConfigChange(object):
@@ -28,5 +27,4 @@ class ConfigChange(object):
         self.addr = addr
         self.phase = phase
         self.type = BaseMessage.ChangeMessage
-        if DEBUG or MESSAGES_MODELS:
-            logger.debug('Config Change: new_config = {}, uuid = {}, phase = {}, addr = {}'.format(new_config, uuid, phase, addr))
+        logger.debug('Config Change: new_config = {}, uuid = {}, phase = {}, addr = {}'.format(new_config, uuid, phase, addr))
