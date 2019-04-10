@@ -57,7 +57,7 @@ class Server(object):
 
         self.listener = KThread(target = self.listen, args= (acceptor,))
         self.listener.start()
-        logger.debug('Started listening on port {}'.format(self.port))
+        logger.info('Started listening on port {}'.format(self.port))
 
         self.during_change = 0
         self.newPeers = []
@@ -65,7 +65,7 @@ class Server(object):
         self.old = None
 
     def listen(self, on_accept):
-        logger.info('Server Listen Method')
+        logger.debug('Server Listen Method')
         srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         srv.bind(("", self.port))
         print 'start listenning ', self.id, " ", self.currentTerm
@@ -77,7 +77,7 @@ class Server(object):
         srv.close()
 
     def follower(self):
-        logger.info('Server Follower Method')
+        logger.debug('Server Follower Method')
         print ' '
         print '*************************'
         print 'Running as a follower ', self.id, " ", self.currentTerm
@@ -102,7 +102,7 @@ class Server(object):
             self.startElection()
 
     def startElection(self):
-        print 'Server startElection Method ', self.id, " ", self.currentTerm
+        logger.info('Server startElection Method server ID - {} Current Term = {}'.format(self.id, self.currentTerm))
         self.role = 'candidate'
         self.election = KThread(target =self.threadElection, args = ())
         if len(self.peers) != 0:
@@ -172,8 +172,7 @@ class Server(object):
 
 
     def appendEntries(self):
-        if DEBUG:
-            print 'Server appendEntries Method ', self.id, " ", self.currentTerm
+        logger.debug('Server appendEntries Method ', self.id, " ", self.currentTerm)
         receipts = self.peers[:]
         while 1:
             receipts = self.peers[:]
@@ -202,10 +201,10 @@ class Server(object):
                 data = pickle.dumps(msg)
                 sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
                 sock.sendto(data, ("", self.addressbook[peer]))
-            time.sleep(1)
+            time.sleep(5)
 
     def stepDown(self):
-        logger.info('Server stepDown Method')
+        logger.debug('Server stepDown Method')
         if self.role == 'candidate':
             print 'candidate step down when higher term and becomes follower', self.id, " ", self.currentTerm
             self.election.kill()
@@ -219,16 +218,21 @@ class Server(object):
     def load(self):
         print 'Server load config Method ', self.id
         initial_running = [1,2,3]
-
         try:
             with open(self.configFile) as f:
                 serverConfig = pickle.load(f)
         except Exception as e:
+            logger.error('Exception in loading the config file {}'.format(e))
+            initialState = {}
+            initialState[SERVER_NODE_GROUP_NAME] = {}
             if self.id not in initial_running:
-                serverConfig = ServerConfig(100, 0, -1, [], [])
+                logger.info('Not a part of initial running. Starting with empty configuration')
+                # TODO: THis is the tricky point
+                serverConfig = ServerConfig(initialState, 0, -1, [], [])
             else:
+                logger.info('Part of initial running list. So trying to connect with others as peers')
                 initial_running.remove(self.id)
-                serverConfig = ServerConfig(100, 0, -1, [], initial_running)
+                serverConfig = ServerConfig(initialState, 0, -1, [], initial_running)
 
         self.groupInfo = serverConfig.groupInfo
         self.currentTerm = serverConfig.currentTerm
@@ -238,15 +242,13 @@ class Server(object):
         self.majority = (len(self.peers) + 1)/2 + 1
 
     def save(self):
-        if DEBUG:
-            print 'Server save config Method ', self.id, " ", self.currentTerm
+        logger.debug('Server save config Method ', self.id, " ", self.currentTerm)
         serverConfig = ServerConfig(self.groupInfo, self.currentTerm, self.votedFor, self.log, self.peers)
         with open(self.configFile, 'w') as f:
             pickle.dump(serverConfig, f)
 
     def run(self):
-        if DEBUG:
-            print 'Server thread run Method ', self.id, " ", self.currentTerm
+        logger.debug('Server thread run Method ', self.id, " ", self.currentTerm)
         time.sleep(1)
         self.follower_state = KThread(target = self.follower, args = ())
         self.follower_state.start()
