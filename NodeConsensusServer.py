@@ -110,17 +110,7 @@ class Server(object):
             self.votedFor = self.id
             self.save()
             self.numVotes = 1
-            if self.during_change == 1:
-                self.newVotes = 0
-                self.oldVotes = 0
-                if self.id in self.new:
-                    self.newVotes = 1
-                if self.id in self.old:
-                    self.oldVotes = 1
-            elif self.during_change == 2:
-                self.newVotes = 0
-                if self.id in self.new:
-                    self.newVotes = 1
+
             self.election.start()
 
     def threadElection(self):
@@ -217,7 +207,7 @@ class Server(object):
 
     def load(self):
         print 'Server load config Method ', self.id
-        initial_running = [1,2,3]
+        initial_running = [1,2,3,4]
         try:
             with open(self.configFile) as f:
                 serverConfig = pickle.load(f)
