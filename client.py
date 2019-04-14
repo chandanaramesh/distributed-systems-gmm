@@ -8,7 +8,7 @@ import logging
 import argparse
 
 from KThread import *
-from messages.config_messages import ConfigChange
+#from messages.config_messages import ConfigChange
 from messages.request_redirect import Request
 
 SHOW_STATE_TIMEOUT = 5
