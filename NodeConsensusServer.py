@@ -85,6 +85,7 @@ class Server(object):
         print "The terms is ", self.currentTerm
         print "My Peers are ", self.peers
         print '*************************'
+        logger.info('Running as a follower ')
         self.role = 'follower'
         self.last_update = time.time()
         election_timeout = 5 * random.random() + 5
@@ -139,6 +140,7 @@ class Server(object):
         print "The terms is ", self.currentTerm
         print "My Peers are ", self.peers
         print '*************************'
+        logger.info('Running as a leader')
         self.role = 'leader'
         self.nextIndex = {}
         self.matchIndex = {}
