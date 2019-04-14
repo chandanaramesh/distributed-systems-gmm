@@ -16,7 +16,7 @@ import logging
 from KThread import *
 from messages.base_message import BaseMessage
 from messages.log_messages import LogEntry
-from messages.config_messages import ConfigChange
+#from messages.config_messages import ConfigChange
 from messages.request_redirect import RequestRedirect
 from messages.vote_messages import VoteResponseMessage
 from messages.append_entries_messages import AppendEntriesResponseMessage
@@ -34,7 +34,7 @@ def acceptor(server, data, addr):
         1: requestVote,
         2: responseVote,
         3: appendEntriesResponse,
-        4: changeConfig,
+        #4: changeConfig,
         5: clientRequests,
         6: clientRequests
     }
@@ -256,53 +256,6 @@ def appendEntriesResponse(server, message, addr):
                             logger.debug('Replied to the client')
                         server.commitIndex = N
      # print 'send new once'
-
-
-def changeConfig(server, Msg, addr):
-    print '&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&& msg.phase, server,role &&&&&&&&&&&&&&&&&&&& ', Msg.phase, server.role
-    if Msg.phase == 1:
-        print 'Config change phase 1 ', server.id, " ", server.currentTerm
-        server.during_change = 1
-        server.new = Msg.new_config
-        server.old = server.peers[:]
-        server.old.append(server.id)
-        if Msg.addr != None:
-            addr = Msg.addr
-        newEntry = LogEntry(server.currentTerm, Msg, addr, Msg.uuid, 1)
-        server.log.append(newEntry)
-        server.peers = list(set(server.old + server.new))
-        server.peers.remove(server.id)
-        server.save()
-        print 'Config change phase 1 applied'
-    # return
-    else:
-        print 'Config change phase 2 ', server.id, " ", server.currentTerm
-        server.during_change = 2
-        server.new = Msg.new_config
-        if Msg.addr != None:
-            addr = Msg.addr
-        newEntry = LogEntry(server.currentTerm, Msg, addr, Msg.uuid, 2)
-        server.log.append(newEntry)
-        server.peers = server.new[:]
-        if server.id in server.peers:
-            server.peers.remove(server.id)
-        server.save()
-        print 'Config change phase 2 applied, running peers'
-
-    if server.role != 'leader':
-        print 'redirect config change to the leader from  ', server.id, " ", server.currentTerm
-        if server.leaderID != 0:
-            redirect_target = server.leaderID
-        else:
-            redirect_target = random.choice(server.peers)
-        if Msg.addr != None:
-            addr = Msg.addr
-        redirect_msg = ConfigChange(Msg.new_config, Msg.uuid, Msg.phase, addr)
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.sendto(pickle.dumps(redirect_msg), ("", server.addressbook[redirect_target]))
-        s.close()
-
-    return
 
 
 def clientRequests(server, Msg, addr):
