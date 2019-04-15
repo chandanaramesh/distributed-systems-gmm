@@ -1,0 +1,110 @@
+<!doctype html>
+<html xmlns="http://www.w3.org/1999/html">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+        <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+        <style>
+            ul, #myUL {
+                list-style-type: none;
+            }
+
+            #myUL {
+                margin: 0;
+                padding: 0;
+            }
+
+            .caret {
+                cursor: pointer;
+                -webkit-user-select: none; /* Safari 3.1+ */
+                -moz-user-select: none; /* Firefox 2+ */
+                -ms-user-select: none; /* IE 10+ */
+                user-select: none;
+            }
+
+            .caret::before {
+                content: "\25B6";
+                color: black;
+                display: inline-block;
+                margin-right: 6px;
+            }
+
+            .caret-down::before {
+                -ms-transform: rotate(90deg); /* IE 9 */
+                -webkit-transform: rotate(90deg); /* Safari */
+                transform: rotate(90deg);
+            }
+
+            .nested {
+                display: none;
+            }
+
+            .active {
+                display: block;
+}
+            #deleteGroupSubmit{
+            top: 400px;
+            
+            }
+        </style>
+    </head>
+<body>
+<div class="container">
+  <div class="row">
+    <div class="col-sm">
+    <form action="/addprocess" method="POST">
+            <label for="input1">ADD PROCESS</label>
+            <input type="text" class="form-control" name="groupProcessAdd" placeholder="Enter Group Name">
+            <input type="text" class="form-control"name ="addProcess" placeholder="Enter Process">
+            <button type="submit" class="btn btn-info">Add</button>
+    </form></div>
+    <div class="col-sm">
+    <form action="/deleteprocess" method="POST">
+            <label for="input2">DELETE PROCESS</label>
+            <input type="text" class="form-control" name="groupProcessDelete" placeholder="Enter Group Name">
+            <input type="text" class="form-control" name="deleteProcess" placeholder="Enter Process Name">
+            <button type="submit" class="btn btn-danger">Delete</button>
+    </form></div>
+      <div class="col-sm">
+    <form action="/deletegroup" method="POST" name="groupDelete">
+            <label for="input2">DELETE GROUP</label>
+            <input type="text" class="form-control" name="groupDelete" placeholder="Enter Group Name">
+          <br><br>
+            <button type="submit" id="deleteGroupSubmit" class="btn btn-danger">Delete</button>
+    </form></div>
+
+  </div>
+</div>
+{% for key, value in data.items() %}
+    <ul id="myUL">
+        <li><span class="caret">{{key}}</span>
+        <ul class="nested">
+    {% for k, v in value.items() %}
+        <li><span class="caret">{{v.nodeId}}</span>
+             <ul class="nested">
+               <li><h3>Node Name: {{v.nodeName}}</h3></li>
+               <li><h3>Node Age: {{v.nodeAge}}</h3></li>
+             </ul>
+        </li>
+    {% endfor %}
+        </ul>
+        </li>
+    </ul>
+
+{% endfor %}
+    <script>
+        var toggler = document.getElementsByClassName("caret");
+        var i;
+        for (i = 0; i < toggler.length; i++) {
+            toggler[i].addEventListener("click", function() {
+            this.parentElement.querySelector(".nested").classList.toggle("active");
+            this.classList.toggle("caret-down");
+        });
+    }
+
+    </script>
+</body>
+</html>
