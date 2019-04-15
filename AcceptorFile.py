@@ -259,7 +259,7 @@ def appendEntriesResponse(server, message, addr):
                                 s.close()
                             logger.debug('Replied to the client')
                         server.commitIndex = N
-     # print 'send new once'
+
 def clientRequests(server, Msg, addr):
     # addr = Msg.addr
     msg_string = Msg.request_msg
