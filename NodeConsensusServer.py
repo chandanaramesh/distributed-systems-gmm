@@ -209,7 +209,7 @@ class Server(object):
 
     def load(self):
         print 'Server load config Method ', self.id
-        initial_running = [1,2,3,4]
+        initial_running = [1,2,3,4,5]
         try:
             with open(self.configFile) as f:
                 serverConfig = pickle.load(f)
