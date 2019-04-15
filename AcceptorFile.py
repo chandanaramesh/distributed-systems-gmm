@@ -23,6 +23,7 @@ from messages.append_entries_messages import AppendEntriesResponseMessage
 from messages.node_information import NodeInformation
 
 from commons.Constants import DEBUG, ACCEPTOR, SERVER_NODE_GROUP_NAME
+from commons.Utils import getJson
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,6 @@ def appendEntriesMessage(server, Msg, addr):
         lastApplied = server.commitIndex
         server.commitIndex = min(leaderCommit, len(server.log))
         if server.commitIndex > lastApplied:
-            server.groupInfo = server.initialState
             for idx in range(1, server.commitIndex + 1):
                 if server.log[idx - 1].type == BaseMessage.AppendEntriesMessage:
                     server.groupInfo = server.log[idx - 1].command
@@ -98,6 +98,7 @@ def appendEntriesMessage(server, Msg, addr):
     reply_msg = AppendEntriesResponseMessage(server.id, _sender, server.currentTerm, success, matchIndex)
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.sendto(pickle.dumps(reply_msg), ("", server.addressbook[_sender]))
+    s.close()
 
 
 def responseVote(server, Msg, addr):
@@ -193,6 +194,7 @@ def requestVote(server, Msg, addr):
     reply_msg = VoteResponseMessage(server.id, _sender, server.currentTerm, reply)
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.sendto(pickle.dumps(reply_msg), ("", server.addressbook[_sender]))
+    s.close()
 
 
 def appendEntriesResponse(server, message, addr):
@@ -266,7 +268,7 @@ def clientRequests(server, Msg, addr):
         for group in server.groupInfo:
             nodeMap = {}
             for node in server.groupInfo[group]:
-                nodeMap[node] = server.groupInfo[group][node].getJson()
+                nodeMap[node] = getJson(server.groupInfo[group][node])
             groupMap[group] = nodeMap
         state = json.dumps(groupMap)
         show_msg = str(state)
@@ -275,9 +277,13 @@ def clientRequests(server, Msg, addr):
         s.close()
     elif 'addProcess' in msg_string:
         commandSplit = msg_string.split()
-        print 'baseCommand = {}, groupName = {}, processName = {}'.format(commandSplit[0], commandSplit[1], commandSplit[2])
-        groupName = commandSplit[1]
-        processName = commandSplit[2]
+        if len(commandSplit) > 2:
+            print 'baseCommand = {}, groupName = {}, processName = {}'.format(commandSplit[0], commandSplit[1], commandSplit[2])
+            groupName = commandSplit[1]
+            processName = commandSplit[2]
+        else: 
+            print 'baseCommand = {}, groupName = {}'.format(commandSplit[0], commandSplit[1])
+            groupName = commandSplit[1]
         if server.role == 'leader':
             print 'I am the leader and I have a request to add a process {} to the group {}'.format(commandSplit[2], commandSplit[1])
             print 'Searching logs'
@@ -289,7 +295,7 @@ def clientRequests(server, Msg, addr):
                         for group in server.groupInfo:
                             nodeMap = {}
                             for node in server.groupInfo[group]:
-                                nodeMap[node] = server.groupInfo[group][node].getJson()
+                                nodeMap[node] = getJson(server.groupInfo[group][node])
                             groupMap[group] = nodeMap
                         state = json.dumps(groupMap)
                         show_msg = str(state)
@@ -303,9 +309,10 @@ def clientRequests(server, Msg, addr):
             if groupName in server.groupInfo:
                 for node in server.groupInfo[groupName]:
                     if node == processName:
+                        logger.info('Do nothing. Age was supposted to be updated')
                         # server.groupInfo[groupName][processName].nodeAge+=1
                     else:
-                        newProcess = NodeInformation(processName, 'Process '+processName)
+                        newProcess = NodeInformation(processName, 'P '+processName)
                         flag = True
                 if flag:     
                     server.groupInfo[groupName][processName] = newProcess
@@ -326,7 +333,7 @@ def clientRequests(server, Msg, addr):
             for group in server.groupInfo:
                 nodeMap = {}
                 for node in server.groupInfo[group]:
-                    nodeMap[node] = server.groupInfo[group][node].getJson()
+                    nodeMap[node] = getJson(server.groupInfo[group][node])
                 groupMap[group] = nodeMap
             state = json.dumps(groupMap)
             show_msg = str(state)
@@ -343,7 +350,140 @@ def clientRequests(server, Msg, addr):
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.sendto(pickle.dumps(redirect_msg), ("", server.addressbook[redirect_target]))
             s.close()
+    elif 'deleteProcess' in msg_string:
+        commandSplit = msg_string.split()
+        if len(commandSplit) > 2:
+            print 'baseCommand = {}, groupName = {}, processName = {}'.format(commandSplit[0], commandSplit[1], commandSplit[2])
+            groupName = commandSplit[1]
+            processName = commandSplit[2]
+        else: 
+            print 'baseCommand = {}, groupName = {}'.format(commandSplit[0], commandSplit[1])
+            groupName = commandSplit[1]
+        if server.role == 'leader':
+            print 'I am the leader and I have a request to delete a process {} to the group {}'.format(commandSplit[2], commandSplit[1])
+            print 'Searching logs'
+            for idx, entry in enumerate(server.log): # To check if the entry is already present
+                if entry.uuid == Msg.uuid:
+                    if server.commitIndex >= idx + 1:
+                        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                        groupMap = {}
+                        for group in server.groupInfo:
+                            nodeMap = {}
+                            for node in server.groupInfo[group]:
+                                nodeMap[node] = getJson(server.groupInfo[group][node])
+                            groupMap[group] = nodeMap
+                        state = json.dumps(groupMap)
+                        show_msg = str(state)
+                        s.sendto(show_msg, addr)
+                        s.close()
+                    else:  # ignore
+                        pass
+                    return  # ignore this new command
+            print 'Seaching group name exists'
+            flag = False
+            if groupName in server.groupInfo:
+                for node in server.groupInfo[groupName]:
+                    if node == processName:
+                        logger.info('Do nothing. Age was supposted to be updated')
+                        flag = True
+                if flag:     
+                    del server.groupInfo[groupName][processName]
+            if flag:
+                print 'Appending updated group info to the log'
+                newEntry = LogEntry(server.currentTerm, server.groupInfo, addr, Msg.uuid)
+                print 'Log Length = {}'.format(len(server.log))
+                server.log.append(newEntry)
+                print 'Log Length after append = {}'.format(len(server.log))
 
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            groupMap = {}
+            for group in server.groupInfo:
+                nodeMap = {}
+                for node in server.groupInfo[group]:
+                    nodeMap[node] = getJson(server.groupInfo[group][node])
+                groupMap[group] = nodeMap
+            state = json.dumps(groupMap)
+            show_msg = str(state)
+            s.sendto(show_msg, addr)
+            s.close()
+            if flag:
+                server.save()
+            flag = False
+        else:
+            print 'Redirect addProcess request to leader from ', server.id, " ", server.currentTerm
+            if server.leaderID != 0:
+                redirect_target = server.leaderID
+            else:
+                redirect_target = random.choice(server.peers)
+            redirect_msg = RequestRedirect(msg_string, Msg.uuid, addr)
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.sendto(pickle.dumps(redirect_msg), ("", server.addressbook[redirect_target]))
+            s.close()
+    elif 'deleteGroup' in msg_string:
+        commandSplit = msg_string.split()
+        if len(commandSplit) > 2:
+            print 'baseCommand = {}, groupName = {}, processName = {}'.format(commandSplit[0], commandSplit[1], commandSplit[2])
+            groupName = commandSplit[1]
+            processName = commandSplit[2]
+        else: 
+            print 'baseCommand = {}, groupName = {}'.format(commandSplit[0], commandSplit[1])
+            groupName = commandSplit[1]
+        if server.role == 'leader':
+            print 'I am the leader and I have a request to delete the group {}'.format(groupName)
+            print 'Searching logs'
+            for idx, entry in enumerate(server.log): # To check if the entry is already present
+                if entry.uuid == Msg.uuid:
+                    if server.commitIndex >= idx + 1:
+                        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                        groupMap = {}
+                        for group in server.groupInfo:
+                            nodeMap = {}
+                            for node in server.groupInfo[group]:
+                                nodeMap[node] = getJson(server.groupInfo[group][node])
+                            groupMap[group] = nodeMap
+                        state = json.dumps(groupMap)
+                        show_msg = str(state)
+                        s.sendto(show_msg, addr)
+                        s.close()
+                    else:  # ignore
+                        pass
+                    return  # ignore this new command
+            print 'Seaching group name exists'
+            flag = False
+            if groupName in server.groupInfo:
+                flag = True
+                del server.groupInfo[groupName]
+            if flag:
+                print 'Appending updated group info to the log'
+                newEntry = LogEntry(server.currentTerm, server.groupInfo, addr, Msg.uuid)
+                print 'Log Length = {}'.format(len(server.log))
+                server.log.append(newEntry)
+                print 'Log Length after append = {}'.format(len(server.log))
+
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            groupMap = {}
+            for group in server.groupInfo:
+                nodeMap = {}
+                for node in server.groupInfo[group]:
+                    nodeMap[node] = getJson(server.groupInfo[group][node])
+                groupMap[group] = nodeMap
+            state = json.dumps(groupMap)
+            show_msg = str(state)
+            s.sendto(show_msg, addr)
+            s.close()
+            if flag:
+                server.save()
+            flag = False
+        else:
+            print 'Redirect addProcess request to leader from ', server.id, " ", server.currentTerm
+            if server.leaderID != 0:
+                redirect_target = server.leaderID
+            else:
+                redirect_target = random.choice(server.peers)
+            redirect_msg = RequestRedirect(msg_string, Msg.uuid, addr)
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.sendto(pickle.dumps(redirect_msg), ("", server.addressbook[redirect_target]))
+            s.close()
     else:
         logger.info('Unknown command from the client. Ignoring')
     return

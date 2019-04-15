@@ -47,6 +47,7 @@ class ClientRequestor(object):
                     print 'Did not receive reply from server within the timeout time of ' + str(SHOW_STATE_TIMEOUT)
             except Exception as e:
                 print 'Connection refused'
+        s.close()
 
     def addProcess(self, port, command, uuid):
         logger.info('Making request to add Process')
@@ -63,6 +64,42 @@ class ClientRequestor(object):
                     print 'Did not receive reply from server within the timeout time of ' + str(CRUD_TIMEOUT)
             except Exception as e:
                 print 'Connection refused'
+        s.close()
+
+    def deleteProcess(self, port, command, uuid):
+        logger.info('Making request to delete Process')
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        msg = Request(command, uuid)
+        s.sendto(pickle.dumps(msg), ("", port))
+        while 1:
+            try:
+                reply, addr = s.recvfrom(1024)
+                if reply != '':
+                    print reply
+                    break
+                else:
+                    print 'Did not receive reply from server within the timeout time of ' + str(CRUD_TIMEOUT)
+            except Exception as e:
+                print 'Connection refused'
+        s.close()
+    
+    def deleteGroup(self, port, command, uuid):
+        logger.info('Making request to delete Group')
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        msg = Request(command, uuid)
+        s.sendto(pickle.dumps(msg), ("", port))
+        while 1:
+            try:
+                reply, addr = s.recvfrom(1024)
+                if reply != '':
+                    print reply
+                    break
+                else:
+                    print 'Did not receive reply from server within the timeout time of ' + str(CRUD_TIMEOUT)
+            except Exception as e:
+                print 'Connection refused'
+        s.close()
+
 
 def init():
     setupLogging()
@@ -131,6 +168,16 @@ def addProcessHandler(clientRequest, ports, serverId, command, uuid):
     timeout = CRUD_TIMEOUT
     return timeout, requestThread
 
+def deleteProcessHandler(clientRequest, ports, serverId, command, uuid):
+    requestThread = KThread(target=clientRequest.deleteProcess, args=(ports[serverId - 1],command, uuid))
+    timeout = CRUD_TIMEOUT
+    return timeout, requestThread
+
+def deleteGroupHandler(clientRequest, ports, serverId, command, uuid):
+    requestThread = KThread(target=clientRequest.deleteGroup, args=(ports[serverId - 1],command, uuid))
+    timeout = CRUD_TIMEOUT
+    return timeout, requestThread
+
 def main():
     args, ports, num_ports = init()
     if not INTERACTIVE_MODE:
@@ -169,6 +216,14 @@ def main():
             uuid_ = uuid.uuid1()
             logger.info('Adding a process based on the command {}'.format(command))
             timeout, requestThread = addProcessHandler(clientRequestor, ports, serverId, command, uuid_)
+        elif 'deleteProcess' in request:
+            uuid_ = uuid.uuid1()
+            logger.info('Deleting a process based on the command {}'.format(command))
+            timeout, requestThread = deleteProcessHandler(clientRequestor, ports, serverId, command, uuid_)
+        elif 'deleteGroup' in request:
+            uuid_ = uuid.uuid1()
+            logger.info('Deleting a group based on the command {}'.format(command))
+            timeout, requestThread = deleteGroupHandler(clientRequestor, ports, serverId, command, uuid_)
         elif request == 'exit':
             print 'Thanks for using the Group Management Client! See you next time'
             exit(0)
@@ -181,10 +236,11 @@ def main():
             if not requestThread.is_alive():
                 break
         if requestThread.is_alive():
+            print 'Timeout! Try again'
             requestThread.kill()
             exit(0)
         else:
-            print 'Timeout! Try again'
+            # print 'Timeout! Try again'
             exit(0)
 
 
