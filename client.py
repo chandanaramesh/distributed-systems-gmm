@@ -13,7 +13,7 @@ from messages.request_redirect import Request
 
 SHOW_STATE_TIMEOUT = 5
 CHANGE_CONFIG_TIMEOUT = 20
-BUY_TICKETS_TIMEOUT = 20
+CRUD_TIMEOUT = 20
 
 INTERACTIVE_MODE = True
 LOG_LEVEL = logging.DEBUG
@@ -32,22 +32,6 @@ class ClientRequestor(object):
         self.id = ClientRequestor.cnt
         self.num_of_reply = 0
 
-    def buyTickets(self, port, buy_msg, uuid):
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        msg = Request(buy_msg, uuid)
-        s.sendto(pickle.dumps(msg), ("", port))
-        while 1:
-            try:
-                reply, addr = s.recvfrom(1024)
-                if reply != '':
-                    self.num_of_reply += 1
-                    print(reply)
-                if self.num_of_reply == 2:
-                    break
-            except Exception as e:
-                print 'Connection refused'
-        s.close()
-
     def showState(self, port):
         logger.info('Making request to show')
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -63,6 +47,58 @@ class ClientRequestor(object):
                     print 'Did not receive reply from server within the timeout time of ' + str(SHOW_STATE_TIMEOUT)
             except Exception as e:
                 print 'Connection refused'
+        s.close()
+
+    def addProcess(self, port, command, uuid):
+        logger.info('Making request to add Process')
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        msg = Request(command, uuid)
+        s.sendto(pickle.dumps(msg), ("", port))
+        while 1:
+            try:
+                reply, addr = s.recvfrom(1024)
+                if reply != '':
+                    print reply
+                    break
+                else:
+                    print 'Did not receive reply from server within the timeout time of ' + str(CRUD_TIMEOUT)
+            except Exception as e:
+                print 'Connection refused'
+        s.close()
+
+    def deleteProcess(self, port, command, uuid):
+        logger.info('Making request to delete Process')
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        msg = Request(command, uuid)
+        s.sendto(pickle.dumps(msg), ("", port))
+        while 1:
+            try:
+                reply, addr = s.recvfrom(1024)
+                if reply != '':
+                    print reply
+                    break
+                else:
+                    print 'Did not receive reply from server within the timeout time of ' + str(CRUD_TIMEOUT)
+            except Exception as e:
+                print 'Connection refused'
+        s.close()
+    
+    def deleteGroup(self, port, command, uuid):
+        logger.info('Making request to delete Group')
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        msg = Request(command, uuid)
+        s.sendto(pickle.dumps(msg), ("", port))
+        while 1:
+            try:
+                reply, addr = s.recvfrom(1024)
+                if reply != '':
+                    print reply
+                    break
+                else:
+                    print 'Did not receive reply from server within the timeout time of ' + str(CRUD_TIMEOUT)
+            except Exception as e:
+                print 'Connection refused'
+        s.close()
 
 
 def init():
@@ -116,8 +152,8 @@ def parseArguments():
     parser.add_argument(
         "--server", "-s", help=SERVER_IDS_AVAILABLE, required=False, type=int)
     parser.add_argument(
-        "--command", "-c", help="Any of the allowed command [show | add <groupId> <processId> "
-                                "| delete <groupId> <processId> | deleteGroup <GroupId>]", required=False, nargs='+')
+        "--command", "-c", help="Any of the allowed command [show | addProcess <groupId> <processId> "
+                                "| deleteProcess <groupId> <processId> | deleteGroup <GroupId>]", required=False, nargs='+')
     args = parser.parse_args()
     return args
 
@@ -125,6 +161,21 @@ def parseArguments():
 def showHandler(clientRequest, ports, serverId):
     requestThread = KThread(target=clientRequest.showState, args=(ports[serverId - 1],))
     timeout = SHOW_STATE_TIMEOUT
+    return timeout, requestThread
+
+def addProcessHandler(clientRequest, ports, serverId, command, uuid):
+    requestThread = KThread(target=clientRequest.addProcess, args=(ports[serverId - 1],command, uuid))
+    timeout = CRUD_TIMEOUT
+    return timeout, requestThread
+
+def deleteProcessHandler(clientRequest, ports, serverId, command, uuid):
+    requestThread = KThread(target=clientRequest.deleteProcess, args=(ports[serverId - 1],command, uuid))
+    timeout = CRUD_TIMEOUT
+    return timeout, requestThread
+
+def deleteGroupHandler(clientRequest, ports, serverId, command, uuid):
+    requestThread = KThread(target=clientRequest.deleteGroup, args=(ports[serverId - 1],command, uuid))
+    timeout = CRUD_TIMEOUT
     return timeout, requestThread
 
 def main():
@@ -142,9 +193,8 @@ def main():
                 print 'Thanks for using the Group Management Client! See you next time'
                 exit(0)
             else:
-                uuid_ = uuid.uuid1()
-                requestThread = KThread(target=clientRequestor.buyTickets, args=(ports[serverId - 1], request, uuid_))
-                timeout = BUY_TICKETS_TIMEOUT
+                print 'Default Condition Encountered. Exiting'
+                exit(0)
             start_time = time.time()
             requestThread.start()
             while time.time() - start_time < timeout:
@@ -159,16 +209,27 @@ def main():
         clientRequestor = ClientRequestor()
         serverId = args.server
         request = ' '.join(args.command)
-        if request == 'show':
+        if 'show' in request:
             logger.info('Delegating to show handler')
             timeout, requestThread = showHandler(clientRequestor, ports, serverId)
+        elif 'addProcess' in request:
+            uuid_ = uuid.uuid1()
+            logger.info('Adding a process based on the command {}'.format(command))
+            timeout, requestThread = addProcessHandler(clientRequestor, ports, serverId, command, uuid_)
+        elif 'deleteProcess' in request:
+            uuid_ = uuid.uuid1()
+            logger.info('Deleting a process based on the command {}'.format(command))
+            timeout, requestThread = deleteProcessHandler(clientRequestor, ports, serverId, command, uuid_)
+        elif 'deleteGroup' in request:
+            uuid_ = uuid.uuid1()
+            logger.info('Deleting a group based on the command {}'.format(command))
+            timeout, requestThread = deleteGroupHandler(clientRequestor, ports, serverId, command, uuid_)
         elif request == 'exit':
             print 'Thanks for using the Group Management Client! See you next time'
             exit(0)
         else:
-            uuid_ = uuid.uuid1()
-            requestThread = KThread(target=clientRequestor.buyTickets, args=(ports[serverId - 1], request, uuid_))
-            timeout = BUY_TICKETS_TIMEOUT
+            print 'Default Condition Encountered. Exiting'
+            exit(0)
         start_time = time.time()
         requestThread.start()
         while time.time() - start_time < timeout:
@@ -177,6 +238,10 @@ def main():
         if requestThread.is_alive():
             print 'Timeout! Try again'
             requestThread.kill()
+            exit(0)
+        else:
+            # print 'Timeout! Try again'
+            exit(0)
 
 
 if __name__ == '__main__':

@@ -35,7 +35,7 @@ class Server(object):
         address = json.load(file('config.json'))
         port_list = address['AddressBook']
         running = address['running']
-        self.initialState = {}
+        self.groupInfo = {}
         # self.initialState = 100
         self.addressbook = {}
         for id_ in running:
@@ -129,6 +129,7 @@ class Server(object):
                     data = pickle.dumps(msg)
                     sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
                     sock.sendto(data, ("", self.addressbook[peer]))
+                    sock.close()
             time.sleep(1) # wait for servers to receive
 
     def leader(self):
@@ -153,14 +154,14 @@ class Server(object):
         for peer in self.peers:
             peerNodeInfo = NodeInformation(peer, self._formFriendlyName(peer), 1)
             nodes[peer] = peerNodeInfo
-        self.initialState[SERVER_NODE_GROUP_NAME] = nodes
+        # self.groupInfo[SERVER_NODE_GROUP_NAME] = nodes
         _uuid = uuid.uuid1()
-        newAppendLogEntry = LogEntry(self.currentTerm, self.initialState, BaseMessage.LocalMessageAddress, _uuid)
+        newAppendLogEntry = LogEntry(self.currentTerm, self.groupInfo, BaseMessage.LocalMessageAddress, _uuid)
         self.log.append(newAppendLogEntry)
         self.appendEntries()
 
     def _formFriendlyName(self, id):
-        return 'Server '+ str(id)
+        return 'S '+ str(id)
 
 
     def appendEntries(self):
@@ -193,6 +194,7 @@ class Server(object):
                 data = pickle.dumps(msg)
                 sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
                 sock.sendto(data, ("", self.addressbook[peer]))
+                sock.close()
             time.sleep(5)
 
     def stepDown(self):
@@ -238,6 +240,7 @@ class Server(object):
         serverConfig = ServerConfig(self.groupInfo, self.currentTerm, self.votedFor, self.log, self.peers)
         with open(self.configFile, 'w') as f:
             pickle.dump(serverConfig, f)
+            f.flush()
 
     def run(self):
         logger.debug('Server thread run Method ', self.id, " ", self.currentTerm)
